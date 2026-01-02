@@ -1,0 +1,5 @@
+__pycache__/
+agent/
+*.log
+telegram.ipynb
+config.py
