@@ -37,12 +37,17 @@ def user_portfolio_info(config: RunnableConfig)->str:
     """
     Получает данные о портфеле пользователя из функции return_portfolio. На основе которых можешь делать анализ и выполнять любые иные действия.
     """
-    thread_id = config.get("configurable", {}).get("thread_id", {})
+    thread_id = config.get("configurable", {}).get("thread_id")
+    t_invest_token = config.get("configurable", {}).get("t_invest_token")
+    bonds_names = config.get("configurable", {}).get("bonds_names", {})
+
     logger.info(f"Tool 'user_portfolio_info' called for thread_id: {thread_id}")
 
+    if not t_invest_token:
+        return "Ошибка: Токен T-Инвестиций не установлен. Пожалуйста, воспользуйтесь командой /set_token."
+
     try:
-        bonds_names = config.get("configurable", {}).get("bonds_names", {})
-        data = return_portfolio(bonds_names)
+        data = return_portfolio(bonds_names, t_invest_token)
         logger.debug(f"Portfolio data retrieved for {thread_id}")
         return data
     except Exception as e:
@@ -99,18 +104,17 @@ memory = MemorySaver()
 
 app = workflow.compile(checkpointer=memory)
 
-def agent_answer(user_input: str, user_id: int, bonds_names: dict) -> str:
+def agent_answer(user_input: str, user_id: int, bonds_names: dict, user_token: str) -> str:
 
     config = {
         "configurable": {
             "thread_id": str(user_id), # Уникальный ID диалога
-            "bonds_names": bonds_names
+            "bonds_names": bonds_names,
+            "t_invest_token": user_token
         }
     }
 
     input_data = {"messages": [HumanMessage(content=user_input)]}
-
     result = app.invoke(input_data, config=config)
-    answer = result["messages"][-1]
 
-    return answer.content
+    return result["messages"][-1].content

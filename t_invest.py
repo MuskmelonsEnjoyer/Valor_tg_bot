@@ -1,24 +1,20 @@
-from config import T_INVEST_TOKEN
-
 from t_tech.invest import Client
 from t_tech.invest.utils import quotation_to_decimal, money_to_decimal
 
 from decimal import Decimal
 
-token = T_INVEST_TOKEN
-
 def format_money(value: Decimal) -> str:
     # Форматирует: 12345.678 -> "12 345.68"
     return f"{value:,.2f}".replace(",", " ")
 
-def get_bond_names_map(toketn: str):
+def get_bond_names_map(token: str) -> dict:
     """Создает словарь {isin: name} для всех облигаций в Т-Инвестициях"""
     with Client(token) as client:
         print("Загрузка справочника облигаций...")
         instruments = client.instruments.bonds()
     return {b.isin: b.name for b in instruments.instruments}
 
-def process_portfolio(client, account_id):
+def process_portfolio(client: Client, account_id: str) -> tuple:
     """
     Функция для получения информации об активах клиента.
     """
@@ -40,7 +36,7 @@ def process_portfolio(client, account_id):
         
     return total_val, currency, positions_list
 
-def get_all_info(token):
+def get_all_info(token: str) -> tuple:
     """
     Функция для получения информации на всех счетах клиента.
     """
@@ -69,12 +65,12 @@ def get_all_info(token):
     return result_data, total_cost
 
 # Форматированный вывод информации о портфеле пользователя
-def return_portfolio(bonds_names: dict) -> str:
+def return_portfolio(bonds_names: dict, token: str) -> str:
     lines = []
     lines.append("💼 <b>Ваш портфель</b>")
     lines.append("")
 
-    data = get_all_info(T_INVEST_TOKEN)
+    data = get_all_info(token)
 
     for idx, account in enumerate(data[0]):
         positions = account.get('positions', [])

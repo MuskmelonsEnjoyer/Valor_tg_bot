@@ -13,6 +13,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from t_invest import get_all_info, return_portfolio, get_bond_names_map
 from agent import agent_answer
 from another import clean_text
+from database import init_db, save_user_token, get_user_token, delete_user_token
 
 from config import TELEGRAM_TOKEN, T_INVEST_TOKEN
 
@@ -27,10 +28,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 dp = Dispatcher(storage=MemoryStorage())
+
 BONDS_DATA = {}
 
 class UserState(StatesGroup):
     waiting_for_text = State()
+    waiting_for_token = State()
 
 # обработчик команды /start
 @dp.message(CommandStart())
@@ -50,10 +53,34 @@ async def info_command(message: Message) -> None:
     )
     await message.answer(info_text, parse_mode="HTML")
 
+# Обработчик команды /set_token. Запрашивает у пользователя токен T-Инвестиций и сохраняет его.
+@dp.message(Command("set_token"))
+async def set_token_command(message: Message, state: FSMContext) -> None:
+     await message.answer("Пожалуйста, отправьте ваш токен T-Инвестиций")
+     await state.set_state(UserState.waiting_for_token)
+
+# Обработчик получения токена от пользователя.
+@dp.message(UserState.waiting_for_token)
+async def process_token(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    token = message.text
+    save_user_token(user_id, token)
+    await state.clear()
+    await message.answer("Токен успешно сохранен!")
+
+# Обработчик команды /delete_token. Удаляет сохраненный токен T-Инвестиций пользователя.
+@dp.message(Command("delete_token"))
+async def delete_token_command(message: Message) -> None:
+    user_id = message.from_user.id
+    delete_user_token(user_id)
+    await message.answer("Токен успешно удален!")
+
 # Обработчик команды /portfolio. Выводит информацию о портфеле пользователя.
 @dp.message(Command("portfolio"))
 async def return_portfolio_tel(message: Message) -> None:
-    format_message = return_portfolio(bonds_names=BONDS_DATA)
+    user_id = message.from_user.id
+    user_token = get_user_token(user_id)
+    format_message = return_portfolio(bonds_names=BONDS_DATA, token=user_token)
     await message.answer(format_message, parse_mode="HTML")
 
 # Обработчик команды /agent. Входит в режим агента финансовой поддержки.
@@ -67,6 +94,10 @@ async def agent_mode(message: Message, state: FSMContext):
 async def process_text(message: Message, state: FSMContext):
     user_input = clean_text(message.text)
     user_id = message.from_user.id
+    user_token = get_user_token(user_id)
+
+    if not user_token:
+        return await message.answer("Ошибка: Токен T-Инвестиций не установлен. Пожалуйста, воспользуйтесь командой /set_token.")
 
     logger.info(f"User {user_id} sent request: {user_input[:50]}...")
 
@@ -78,7 +109,8 @@ async def process_text(message: Message, state: FSMContext):
             None, 
             agent_answer, 
             user_input,
-            user_id, 
+            user_id,
+            user_token, 
             BONDS_DATA)
         
         logger.info(f"Agent response to user {user_id}: {answer[:50]}...")
@@ -108,7 +140,8 @@ async def help_command(message: Message) -> None:
     await message.answer(help_text)
 
 # Главная функция для запуска бота
-async def main() ->None:
+async def main() -> None:
+    init_db()
     print("Запускаем бота...")
     bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     print("Бот запущен")
