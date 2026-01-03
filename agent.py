@@ -1,6 +1,7 @@
 from typing import Annotated, TypedDict, List, Union
 import operator
 import logging
+import json
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chat_models import init_chat_model
@@ -39,7 +40,8 @@ def user_portfolio_info(config: RunnableConfig)->str:
     """
     thread_id = config.get("configurable", {}).get("thread_id")
     t_invest_token = config.get("configurable", {}).get("t_invest_token")
-    bonds_names = config.get("configurable", {}).get("bonds_names", {})
+    bonds_names = config.get("configurable", {}).get("bonds_names")
+
 
     logger.info(f"Tool 'user_portfolio_info' called for thread_id: {thread_id}")
 
@@ -47,16 +49,18 @@ def user_portfolio_info(config: RunnableConfig)->str:
         return "Ошибка: Токен T-Инвестиций не установлен. Пожалуйста, воспользуйтесь командой /set_token."
 
     try:
-        data = return_portfolio(bonds_names, t_invest_token)
-        logger.debug(f"Portfolio data retrieved for {thread_id}")
+        data = return_portfolio(bonds_names=bonds_names, token=t_invest_token)
+        logger.debug(f"Portfolio data retrieved for {thread_id}, tool output: {data[:200]}...")
         return data
     except Exception as e:
-        logger.error(f"Error in tool 'user_portfolio_info': {e}")
-        return f"Ошибка при получении данных портфеля: {e}"
+
+        logger.exception(f"Detailed error in user_portfolio_info for thread: {thread_id}")
+        logger.error(f"Error in tool 'user_portfolio_info': {e[:200]}...")
+
+        return f"Не удалось получить информацию о вашем портфеле."
 
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], operator.add]
-    #messages: Annotated[list[AnyMessage], operator.add]
 
 # llm = ChatGoogleGenerativeAI(
 #     model="gemini-3-flash-preview",
@@ -65,6 +69,7 @@ class AgentState(TypedDict):
 # )
 
 llm = init_chat_model(
+    #"gemini-3-pro-preview",
     "gemini-2.5-flash",
     model_provider="openai",
     api_key=GOOGLE_API_KEY,
@@ -79,9 +84,12 @@ prompt = ChatPromptTemplate.from_messages([
     MessagesPlaceholder(variable_name="messages"),
 ])
 
-def agent_node(state: AgentState):
+def agent_node(state: AgentState, config: RunnableConfig):
 
     messages = state["messages"]
+
+    thread_id = config.get("configurable", {}).get("thread_id")
+    logger.info(f"--- AGENT NODE START --- Thread: {thread_id}")
 
     max_history = 10
     recent_messages = messages[-max_history:] if len(messages) > max_history else messages
@@ -89,6 +97,10 @@ def agent_node(state: AgentState):
 
     response = chain.invoke({"messages": recent_messages})
 
+    if response.tool_calls:
+        logger.info(f"Agent wants to call tools: {[t['name'] for t in response.tool_calls]}")
+    else:
+        logger.info(f"Agent response without tool calls")
     return {"messages": [response]}
 
 workflow = StateGraph(AgentState)
@@ -108,7 +120,7 @@ def agent_answer(user_input: str, user_id: int, bonds_names: dict, user_token: s
 
     config = {
         "configurable": {
-            "thread_id": str(user_id), # Уникальный ID диалога
+            "thread_id": str(user_id),
             "bonds_names": bonds_names,
             "t_invest_token": user_token
         }

@@ -10,12 +10,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
+from t_tech.invest import AsyncClient, RequestError
 from t_invest import get_all_info, return_portfolio, get_bond_names_map
 from agent import agent_answer
 from another import clean_text
-from database import init_db, save_user_token, get_user_token, delete_user_token
-
-from config import TELEGRAM_TOKEN, T_INVEST_TOKEN
+from database import init_db, save_user_token, init_db, on_shutdown, on_startup
+from config import TELEGRAM_TOKEN
 
 logging.basicConfig(
     level=logging.INFO,
@@ -63,12 +63,28 @@ async def set_token_command(message: Message, state: FSMContext) -> None:
 @dp.message(UserState.waiting_for_token)
 async def process_token(message: Message, state: FSMContext):
     user_id = message.from_user.id
-    token = message.text
-    save_user_token(user_id, token)
-    await state.clear()
-    await message.answer("Токен успешно сохранен!")
+    token = message.text.strip()
 
-# Обработчик команды /delete_token. Удаляет сохраненный токен T-Инвестиций пользователя.
+    try:
+        async with AsyncClient(token=token) as client:
+            await client.users.get_accounts()
+            await save_user_token(user_id, token)
+            await message.delete()
+            await state.clear()
+        return await message.answer("Токен успешно сохранен!")
+    
+    except RequestError as e:
+        await message.delete()
+        await message.answer("Ваш токен нейдействителен")
+        await state.clear()
+    
+    except Exception as e:
+        logger.error(f"Error saving token for user {user_id}: {e}")
+        await message.delete()
+        await message.answer("Произошла ошибка при сохранении вашего токена. Пожалуйста, попробуйте позже.")
+        await state.clear()
+
+#Обработчик команды /delete_token. Удаляет сохраненный токен T-Инвестиций пользователя.
 @dp.message(Command("delete_token"))
 async def delete_token_command(message: Message) -> None:
     user_id = message.from_user.id
@@ -141,13 +157,13 @@ async def help_command(message: Message) -> None:
 
 # Главная функция для запуска бота
 async def main() -> None:
-    init_db()
-    print("Запускаем бота...")
     bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    print("Бот запущен")
+
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
+
     await dp.start_polling(bot)
 
 # await main()
 if __name__ == "__main__":
-    BONDS_DATA = get_bond_names_map(T_INVEST_TOKEN)
     asyncio.run(main())
