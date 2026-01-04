@@ -9,12 +9,15 @@ from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.enums import ChatAction
 
 from t_tech.invest import AsyncClient, RequestError
-from t_invest import get_all_info, return_portfolio, get_bond_names_map
+from t_invest import get_all_info
 from agent import agent_answer
 from another import clean_text
-from database import init_db, save_user_token, init_db, on_shutdown, on_startup
+from database import init_db, save_user_token, init_db, on_shutdown, on_startup, delete_user_token, get_user_token, upload_user_portfolio
+from another import get_user_portfolio_xlxs, get_user_portfolio_token
+
 from config import TELEGRAM_TOKEN
 
 logging.basicConfig(
@@ -28,8 +31,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 dp = Dispatcher(storage=MemoryStorage())
-
-BONDS_DATA = {}
 
 class UserState(StatesGroup):
     waiting_for_text = State()
@@ -88,16 +89,24 @@ async def process_token(message: Message, state: FSMContext):
 @dp.message(Command("delete_token"))
 async def delete_token_command(message: Message) -> None:
     user_id = message.from_user.id
-    delete_user_token(user_id)
+    await delete_user_token(user_id)
     await message.answer("Токен успешно удален!")
 
-# Обработчик команды /portfolio. Выводит информацию о портфеле пользователя.
-@dp.message(Command("portfolio"))
-async def return_portfolio_tel(message: Message) -> None:
+@dp.message(Command("set_portfolio_by_token"))
+async def set_portfolio_command(message: Message, state: FSMContext) -> None:
     user_id = message.from_user.id
-    user_token = get_user_token(user_id)
-    format_message = return_portfolio(bonds_names=BONDS_DATA, token=user_token)
-    await message.answer(format_message, parse_mode="HTML")
+    user_token = await get_user_token(user_id)
+    portfolio = await get_user_portfolio_token(user_token)
+    await upload_user_portfolio(portfolio, user_id)
+
+
+# Обработчик команды /portfolio. Выводит информацию о портфеле пользователя.
+# @dp.message(Command("portfolio"))
+# async def return_portfolio_tel(message: Message) -> None:
+#     user_id = message.from_user.id
+#     user_token = get_user_token(user_id)
+#     #format_message = return_portfolio(bonds_names=BONDS_DATA, token=user_token)
+#     await message.answer(format_message, parse_mode="HTML")
 
 # Обработчик команды /agent. Входит в режим агента финансовой поддержки.
 @dp.message(Command("agent"))
@@ -110,32 +119,20 @@ async def agent_mode(message: Message, state: FSMContext):
 async def process_text(message: Message, state: FSMContext):
     user_input = clean_text(message.text)
     user_id = message.from_user.id
-    user_token = get_user_token(user_id)
-
-    if not user_token:
-        return await message.answer("Ошибка: Токен T-Инвестиций не установлен. Пожалуйста, воспользуйтесь командой /set_token.")
 
     logger.info(f"User {user_id} sent request: {user_input[:50]}...")
 
-    wait_msg = await message.answer("Готовлю ответ...")
+    await message.bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
     try:
-        loop = asyncio.get_event_loop()
-        answer = await loop.run_in_executor(
-            None, 
-            agent_answer, 
-            user_input,
-            user_id,
-            user_token, 
-            BONDS_DATA)
+        answer = await agent_answer(user_input, user_id)
         
         logger.info(f"Agent response to user {user_id}: {answer[:50]}...")
 
-        await wait_msg.delete()
         await message.answer(answer, parse_mode="HTML")
     except Exception as e:
         logger.error(f"Error processing request for user {user_id}: {e}")
-        await wait_msg.delete()
+        
         await message.answer("Произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте позже.")
 
 # Обработчик команды /stop. Выходит из режима агента.
@@ -152,6 +149,7 @@ async def help_command(message: Message) -> None:
         "/portfolio - Получить информацию о портфеле\n"
         "/agent - Войти в режим агента финансовой поддержки\n"
         "/stop - Выйти из режима агента\n"
+        "/set_portfolio_by_token"
     )
     await message.answer(help_text)
 
