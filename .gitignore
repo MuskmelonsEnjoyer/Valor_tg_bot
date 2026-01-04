@@ -3,3 +3,5 @@ agent/
 *.log
 telegram.ipynb
 config.py
+bot_data.db
+parsing_data/

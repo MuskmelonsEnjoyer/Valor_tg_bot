@@ -1,6 +1,5 @@
 from typing import Annotated, TypedDict, List, Union
-import operator
-import logging
+import json, asyncio, logging, operator
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chat_models import init_chat_model
@@ -12,10 +11,8 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from config import GOOGLE_API_KEY
-from config import BASE_URL
-
-from t_invest import return_portfolio
+from config import GOOGLE_API_KEY, BASE_URL
+from database import get_user_portfolio
 
 logger = logging.getLogger("agent")
 
@@ -33,25 +30,28 @@ SYS_PROMPT = (
 )
 
 @tool
-def user_portfolio_info(config: RunnableConfig)->str:
+async def user_portfolio_info(config: RunnableConfig)->str:
     """
-    Получает данные о портфеле пользователя из функции return_portfolio. На основе которых можешь делать анализ и выполнять любые иные действия.
+    Получает данные о портфеле пользователя из функции get_user_portfolio.
     """
-    thread_id = config.get("configurable", {}).get("thread_id", {})
+    thread_id = config.get("configurable", {}).get("thread_id")
+    user_id = config.get("configurable", {}).get("user_id")
+
     logger.info(f"Tool 'user_portfolio_info' called for thread_id: {thread_id}")
 
     try:
-        bonds_names = config.get("configurable", {}).get("bonds_names", {})
-        data = return_portfolio(bonds_names)
-        logger.debug(f"Portfolio data retrieved for {thread_id}")
+        data = await get_user_portfolio(user_id)
+        logger.debug(f"Portfolio data retrieved for {thread_id}, tool output: {data[:200]}...")
         return data
     except Exception as e:
-        logger.error(f"Error in tool 'user_portfolio_info': {e}")
-        return f"Ошибка при получении данных портфеля: {e}"
+
+        logger.exception(f"Detailed error in user_portfolio_info for thread: {thread_id}")
+        logger.error(f"Error in tool 'user_portfolio_info': {e[:200]}...")
+
+        return f"Не удалось получить информацию о вашем портфеле."
 
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], operator.add]
-    #messages: Annotated[list[AnyMessage], operator.add]
 
 # llm = ChatGoogleGenerativeAI(
 #     model="gemini-3-flash-preview",
@@ -60,6 +60,7 @@ class AgentState(TypedDict):
 # )
 
 llm = init_chat_model(
+    #"gemini-3-pro-preview",
     "gemini-2.5-flash",
     model_provider="openai",
     api_key=GOOGLE_API_KEY,
@@ -74,16 +75,23 @@ prompt = ChatPromptTemplate.from_messages([
     MessagesPlaceholder(variable_name="messages"),
 ])
 
-def agent_node(state: AgentState):
+async def agent_node(state: AgentState, config: RunnableConfig):
 
     messages = state["messages"]
+
+    thread_id = config.get("configurable", {}).get("thread_id")
+    logger.info(f"--- AGENT NODE START --- Thread: {thread_id}")
 
     max_history = 10
     recent_messages = messages[-max_history:] if len(messages) > max_history else messages
     chain = prompt | llm_with_tools
 
-    response = chain.invoke({"messages": recent_messages})
+    response = await chain.ainvoke({"messages": recent_messages})
 
+    if response.tool_calls:
+        logger.info(f"Agent wants to call tools: {[t['name'] for t in response.tool_calls]}")
+    else:
+        logger.info(f"Agent response without tool calls")
     return {"messages": [response]}
 
 workflow = StateGraph(AgentState)
@@ -99,18 +107,16 @@ memory = MemorySaver()
 
 app = workflow.compile(checkpointer=memory)
 
-def agent_answer(user_input: str, user_id: int, bonds_names: dict) -> str:
+async def agent_answer(user_input: str, user_id: int) -> str:
 
     config = {
         "configurable": {
-            "thread_id": str(user_id), # Уникальный ID диалога
-            "bonds_names": bonds_names
+            "thread_id": str(user_id),
+            "user_id": user_id,
         }
     }
 
     input_data = {"messages": [HumanMessage(content=user_input)]}
+    result = await app.ainvoke(input_data, config=config)
 
-    result = app.invoke(input_data, config=config)
-    answer = result["messages"][-1]
-
-    return answer.content
+    return result["messages"][-1].content
