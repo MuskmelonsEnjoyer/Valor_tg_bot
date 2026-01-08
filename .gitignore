@@ -1,7 +1,7 @@
 __pycache__/
 agent/
-*.log
-telegram.ipynb
-config.py
-bot_data.db
+broker_agent/
+last_version/
 parsing_data/
+config.py
+bot_log.log

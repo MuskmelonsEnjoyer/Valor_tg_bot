@@ -1,75 +1,54 @@
-import asyncio
-import logging
-
-from aiogram import Bot, Dispatcher, html
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
+# обработчик команды /start
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram import html, Router
+from t_tech.invest import AsyncClient, RequestError
 from aiogram.enums import ChatAction
 
-from t_tech.invest import AsyncClient, RequestError
-from t_invest import get_all_info
-from agent import agent_answer
-from another import clean_text
-from database import init_db, save_user_token, init_db, on_shutdown, on_startup, delete_user_token, get_user_token, upload_user_portfolio
-from another import get_user_portfolio_xlxs, get_user_portfolio_token
+import app.database.requests as requests
+import app.agent as agent
+import app.utils.formatting as formatting
+import app.services.portfolio_servise as portfolio_service
 
-from config import TELEGRAM_TOKEN
+from app.bot import states
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("bot_debug.log", encoding="utf-8"),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+router = Router()
 
-dp = Dispatcher(storage=MemoryStorage())
-
-class UserState(StatesGroup):
-    waiting_for_text = State()
-    waiting_for_token = State()
-
-# обработчик команды /start
-@dp.message(CommandStart())
+@router.message(CommandStart())
 async def command_start_hendler(message: Message) -> None:
     await message.answer(f"Привет, {html.bold(message.from_user.full_name)}!\nЯ финансовый помощник. Моя основная задача - помогать с брокерским счётом.\nЧтобы узнать, что я умею, введите /info.")
 
 # обработчик команды /info
-@dp.message(Command("info"))
+@router.message(Command("info"))
 async def info_command(message: Message) -> None:
     info_text = (
         "Я могу помочь Вам с информацией о вашем портфеле в Т-Инвестициях и ответить на вопросы по финансовым рынкам.\n\n"
         "Для того, чтобы я мог получить информацию о вашем портфеле, можно:\n\n"
-        "1. Отправить API ключ Т-Инвестиций через команду /set_token &ltваш_токен&gt (этот токен можно получить в личном кабинете Т-Инвестиций).\n\n"
-        "2. Отправить экспортированный файл портфеля через команду /set_file (файл можно скачать в личном кабинете Т-Инвестиций). (В разработке)\n\n"
-        "3. Прислать список ISIN Ваших бумаг через команду /set_bonds &ltтикер1, тикер2,...&gt\nнапример: /set_bonds SBER, GAZP, SU29001RMFS6... (В разработке)\n\n"
+        "1. Отправить API ключ Т-Инвестиций через команду /set_token &ltваш_токен&gt (этот токен можно получить в личном кабинете Т-Инвестиций),\n\n"
+        "2. Отправить экспортированный файл портфеля через команду /set_file (файл можно скачать в личном кабинете Т-Инвестиций). (В разработке),\n\n"
+        "3. Прислать список ISIN Ваших бумаг через команду /set_actives &ltтикер1, тикер2,...&gt\nнапример: /set_actives SBER, GAZP, SU29001RMFS6... (В разработке).\n\n"
         "Доступные команды: /help\n"
     )
     await message.answer(info_text, parse_mode="HTML")
 
 # Обработчик команды /set_token. Запрашивает у пользователя токен T-Инвестиций и сохраняет его.
-@dp.message(Command("set_token"))
+@router.message(Command("set_token"))
 async def set_token_command(message: Message, state: FSMContext) -> None:
      await message.answer("Пожалуйста, отправьте ваш токен T-Инвестиций")
-     await state.set_state(UserState.waiting_for_token)
+     await state.set_state(states.UserState.waiting_for_token)
 
 # Обработчик получения токена от пользователя.
-@dp.message(UserState.waiting_for_token)
+@router.message(states.UserState.waiting_for_token)
 async def process_token(message: Message, state: FSMContext):
+
     user_id = message.from_user.id
     token = message.text.strip()
 
     try:
         async with AsyncClient(token=token) as client:
             await client.users.get_accounts()
-            await save_user_token(user_id, token)
+            await requests.save_user_token(user_id, token)
             await message.delete()
             await state.clear()
         return await message.answer("Токен успешно сохранен!")
@@ -80,88 +59,62 @@ async def process_token(message: Message, state: FSMContext):
         await state.clear()
     
     except Exception as e:
-        logger.error(f"Error saving token for user {user_id}: {e}")
         await message.delete()
         await message.answer("Произошла ошибка при сохранении вашего токена. Пожалуйста, попробуйте позже.")
         await state.clear()
 
 #Обработчик команды /delete_token. Удаляет сохраненный токен T-Инвестиций пользователя.
-@dp.message(Command("delete_token"))
+@router.message(Command("delete_token"))
 async def delete_token_command(message: Message) -> None:
     user_id = message.from_user.id
-    await delete_user_token(user_id)
+    await requests.delete_user_token(user_id)
     await message.answer("Токен успешно удален!")
 
-@dp.message(Command("set_portfolio_by_token"))
+@router.message(Command("set_portfolio_by_token"))
 async def set_portfolio_command(message: Message, state: FSMContext) -> None:
     user_id = message.from_user.id
-    user_token = await get_user_token(user_id)
-    portfolio = await get_user_portfolio_token(user_token)
-    await upload_user_portfolio(portfolio, user_id)
-
-
-# Обработчик команды /portfolio. Выводит информацию о портфеле пользователя.
-# @dp.message(Command("portfolio"))
-# async def return_portfolio_tel(message: Message) -> None:
-#     user_id = message.from_user.id
-#     user_token = get_user_token(user_id)
-#     #format_message = return_portfolio(bonds_names=BONDS_DATA, token=user_token)
-#     await message.answer(format_message, parse_mode="HTML")
+    user_token = await requests.get_user_token(user_id)
+    portfolio = await portfolio_service.get_user_portfolio_token(user_token)
+    await requests.upload_user_portfolio(portfolio, user_id)
 
 # Обработчик команды /agent. Входит в режим агента финансовой поддержки.
-@dp.message(Command("agent"))
+@router.message(Command("agent"))
 async def agent_mode(message: Message, state: FSMContext):
     await message.answer("Введите ваш запрос:")
-    await state.set_state(UserState.waiting_for_text)
+    await state.set_state(states.UserState.waiting_for_text)
 
 # Обработчик текстовых сообщений. Передает ввод пользователя агенту и возвращает ответ.
-@dp.message(UserState.waiting_for_text)
+@router.message(states.UserState.waiting_for_text)
 async def process_text(message: Message, state: FSMContext):
-    user_input = clean_text(message.text)
+    user_input = formatting.clean_text(message.text)
     user_id = message.from_user.id
-
-    logger.info(f"User {user_id} sent request: {user_input[:50]}...")
 
     await message.bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
     try:
-        answer = await agent_answer(user_input, user_id)
-        
-        logger.info(f"Agent response to user {user_id}: {answer[:50]}...")
+        answer = await agent.agent_answer(user_input, user_id)
 
         await message.answer(answer, parse_mode="HTML")
     except Exception as e:
-        logger.error(f"Error processing request for user {user_id}: {e}")
-        
+
         await message.answer("Произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте позже.")
 
 # Обработчик команды /stop. Выходит из режима агента.
-@dp.message(Command("stop"))
+@router.message(Command("stop"))
 async def stop_command(message: Message, state: FSMContext):
     await state.clear()
     await message.answer("Режим агента остановлен.")
 
 # Список команд бота
-@dp.message(Command("help"))
+@router.message(Command("help"))
 async def help_command(message: Message) -> None:
     help_text = (
         "Доступные команды:\n"
-        "/portfolio - Получить информацию о портфеле\n"
-        "/agent - Войти в режим агента финансовой поддержки\n"
-        "/stop - Выйти из режима агента\n"
-        "/set_portfolio_by_token"
+        "/portfolio - Получить информацию о портфеле. (В разработке).\n"
+        "/delete_token - Удалить токен.\n"
+        "/agent - Войти в режим агента финансовой поддержки.\n"
+        "/stop - Выйти из режима агента.\n"
+        "/set_portfolio_by_token.\n"
+        "/set_portfolio_by_xlxs. (В разработке).\n"
     )
     await message.answer(help_text)
-
-# Главная функция для запуска бота
-async def main() -> None:
-    bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-
-    dp.startup.register(on_startup)
-    dp.shutdown.register(on_shutdown)
-
-    await dp.start_polling(bot)
-
-# await main()
-if __name__ == "__main__":
-    asyncio.run(main())
