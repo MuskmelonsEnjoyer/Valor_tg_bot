@@ -6,7 +6,7 @@ from aiogram.enums import ParseMode
 
 from app.core.config import TELEGRAM_TOKEN
 from app.core.logger import logger_config
-from app.database.session import init_db, on_shutdown
+from app.database.session import on_startup, on_shutdown
 from app.bot.handlers import router as bot_router
 
 async def main():
@@ -14,7 +14,7 @@ async def main():
     logger_config()
     logger = logging.getLogger("main")
     
-    await init_db()
+    await on_startup()
     
     bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()

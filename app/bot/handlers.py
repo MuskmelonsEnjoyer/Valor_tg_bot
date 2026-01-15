@@ -7,13 +7,16 @@ from t_tech.invest import AsyncClient, RequestError
 from aiogram.enums import ChatAction
 
 import app.database.requests as requests
-import app.agent as agent
+import app.agent.agent as agent
 import app.utils.formatting as formatting
 import app.services.portfolio_servise as portfolio_service
 
 from app.bot import states
+import logging
 
 router = Router()
+
+logger = logging.getLogger("handlers")
 
 @router.message(CommandStart())
 async def command_start_hendler(message: Message) -> None:
@@ -96,7 +99,7 @@ async def process_text(message: Message, state: FSMContext):
 
         await message.answer(answer, parse_mode="HTML")
     except Exception as e:
-
+        logger.error(f"Ошибка в работе агента: {e}")
         await message.answer("Произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте позже.")
 
 # Обработчик команды /stop. Выходит из режима агента.
