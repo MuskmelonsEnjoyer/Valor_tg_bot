@@ -3,22 +3,23 @@ import time
 import aiohttp
 import app.services.news_parser as news_parser
 
-async def get_news_summary(hours: int = 24):
 
+async def get_news_summary(hours: int = 24):
     if hours > 48:
         return "Выбран слишком большой промежуток времени", 0
 
     async with aiohttp.ClientSession() as session:
-        
         now = int(time.time())
-        time_delta = hours * 3600 
+        time_delta = hours * 3600
         start_time = now - time_delta
 
-        news_list = await news_parser.get_rbc_quote_news_period(session, start_time, now)
+        news_list = await news_parser.get_rbc_quote_news_period(
+            session, start_time, now
+        )
 
         if not news_list:
             return f"За последние {hours} ч. новостей не найдено.", 0
-        
+
         final_news_content = []
         tasks = []
 
@@ -34,11 +35,9 @@ async def get_news_summary(hours: int = 24):
 
             if not text:
                 text = "Текст статьи недоступен"
-            
+
             formatted_new = (
-                f"Новость №{i+1}, {date}\n"
-                f"Заголовок:\n{title}\n"
-                f"Содержание:\n{text}\n"
+                f"Новость №{i + 1}, {date}\nЗаголовок:\n{title}\nСодержание:\n{text}\n"
             )
 
             final_news_content.append(formatted_new)
