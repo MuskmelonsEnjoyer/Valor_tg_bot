@@ -31,7 +31,7 @@ graph TD
     end
 
     subgraph Приложение
-        C{🤖 AI Агент <br>(LangGraph)}
+        C[🤖 AI Агент <br>(LangGraph)]
         D[⚙️ Сервисы]
         E[🗃️ База данных <br>(PostgreSQL)]
     end
