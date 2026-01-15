@@ -1,5 +1,5 @@
 from t_tech.invest import AsyncClient, InstrumentStatus, InstrumentIdType
-from t_tech.invest.utils import quotation_to_decimal, money_to_decimal
+from t_tech.invest.utils import quotation_to_decimal
 
 async def get_all_instruments_list(token: str) -> list[dict]:
     async with AsyncClient(token) as client:

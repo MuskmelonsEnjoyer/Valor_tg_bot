@@ -1,5 +1,4 @@
-from sqlalchemy import Column, Integer, String, Identity, BigInteger, select, delete, UniqueConstraint
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import Column, Integer, String, Identity, BigInteger, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.database.session import Base

@@ -1,10 +1,12 @@
-import asyncio, time, aiohttp
+import asyncio
+import time
+import aiohttp
 import app.services.news_parser as news_parser
 
 async def get_news_summary(hours: int = 24):
 
     if hours > 48:
-        return f"Выбран слишком большой промежуток времени", 0
+        return "Выбран слишком большой промежуток времени", 0
 
     async with aiohttp.ClientSession() as session:
         

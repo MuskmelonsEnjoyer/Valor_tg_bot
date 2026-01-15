@@ -56,12 +56,12 @@ async def process_token(message: Message, state: FSMContext):
             await state.clear()
         return await message.answer("Токен успешно сохранен!")
     
-    except RequestError as e:
+    except RequestError:
         await message.delete()
         await message.answer("Ваш токен нейдействителен")
         await state.clear()
     
-    except Exception as e:
+    except Exception:
         await message.delete()
         await message.answer("Произошла ошибка при сохранении вашего токена. Пожалуйста, попробуйте позже.")
         await state.clear()
