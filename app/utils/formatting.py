@@ -28,3 +28,9 @@ def clean_text(text: str) -> str:
     clean_text = re.sub(r"\n{3,}", "\n\n", clean_text)
 
     return clean_text.strip()
+
+def format_date(date_str: str | None) -> str:
+    """Преобразует дату из 2026-11-25 в 25.11.2026 с защитой от пустых значений."""
+    if not date_str or "-" not in date_str:
+        return "Н/Д"
+    return ".".join(date_str.split("-")[::-1])

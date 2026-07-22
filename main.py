@@ -9,7 +9,6 @@ from app.core.logger import logger_config
 from app.database.session import on_startup, on_shutdown
 from app.bot.handlers import router as bot_router
 
-
 async def main():
     logger_config()
     logger = logging.getLogger("main")

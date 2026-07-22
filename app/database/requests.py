@@ -5,6 +5,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.database.session import engine
 import app.database.models as models
+from app.services.api_moex import parsing_bonds
 
 
 # Функция загрузки всех активов по API т-инвестиции.
@@ -129,6 +130,41 @@ async def get_user_portfolio(user_id: int) -> dict | None:
     async with AsyncSession(engine) as session:
         stmt = select(models.User_portfolio.portfolio_data).where(
             models.User_portfolio.user_id == user_id
+        )
+
+        result = await session.execute(stmt)
+        record = result.scalar_one_or_none()
+
+        return record
+
+# Функция заполнения БД бондов
+async def upload_bonds_data() -> None:
+    async with AsyncSession(engine) as session:
+
+        bonds = await parsing_bonds()
+
+        insert_data = [
+        {"isin": isin, "extra_data": extra_data}
+        for isin, extra_data in bonds.items()
+    ]
+
+    async with AsyncSession(engine) as session:
+
+        stmt = pg_insert(models.Bonds).values(insert_data)
+
+        upsert_stmt = stmt.on_conflict_do_update(
+            index_elements=["isin"],
+            set_=dict(extra_data=stmt.excluded.extra_data)
+        )
+
+        await session.execute(upsert_stmt)
+        await session.commit()
+
+# Функция получения данных облигации из таблицы
+async def get_bonds_info(isin: str) -> dict | None:
+    async with AsyncSession(engine) as session:
+        stmt = select(models.Bonds.extra_data).where(
+            models.Bonds.isin == isin
         )
 
         result = await session.execute(stmt)
