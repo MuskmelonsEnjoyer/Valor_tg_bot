@@ -1,32 +1,43 @@
+from datetime import datetime
 from decimal import Decimal
-from sqlalchemy import BigInteger, Numeric, String, UniqueConstraint, Date, Any, Identity
+
+from sqlalchemy import (
+    Any,
+    BigInteger,
+    DateTime,
+    Numeric,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
 
 class Base(DeclarativeBase):
     pass
 
 
 # Определение таблицы и модели для хранения информации о всех активах
-class Instrument(Base):
+class Instruments(Base):
     __tablename__ = "instruments"
     __table_args__ = (
-        UniqueConstraint(
-            "instrument_ticker", "instrument_class_code", name="uix_ticker_class_code"
-        ),
         {"schema": "public"},
     )
-    instrument_id: Mapped[int] = mapped_column(Identity(start=1), primary_key=True)
-    instrument_name: Mapped[str] = mapped_column(String, index=True)
-    instrument_isin: Mapped[str | None] = mapped_column(String(12), unique=True)
-    instrument_uid: Mapped[str] = mapped_column(String, index=True)
-    instrument_ticker: Mapped[str] = mapped_column(String, index=True)
-    instrument_currency: Mapped[str] = mapped_column(String, index=True)
-    instrument_type: Mapped[str] = mapped_column(String, index=True)
-    instrument_class_code: Mapped[str] = mapped_column(String, index=True)
-    instrument_source_id: Mapped[str] = mapped_column(String, index=True)
-    instrument_figi: Mapped[str | None] = mapped_column(String, unique=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    secid: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
+    isin: Mapped[str | None] = mapped_column(String(12), unique=True, nullable=True)
+    instrument_type: Mapped[str] = mapped_column("type", String(20), index=True)
+    currency: Mapped[str] = mapped_column(String(10))
+    extra_data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
+    def __repr__(self) -> str:
+        return f"<Instrument(secid='{self.secid}', type='{self.instrument_type}')>"
 
 # Определение таблицы для хранения API-токенов Т-Инвестиций пользователей
 class UserToken(Base):
@@ -37,22 +48,20 @@ class UserToken(Base):
     user_t_invest_token: Mapped[str] = mapped_column(String)
 
 
-# Определение таблицы хранения информации об инструментах
-class HashAllInstrument(Base):
-    __tablename__ = "hash_all_instruments"
-    __table_args__ = {"schema": "public"}
-
-    isin: Mapped[str] = mapped_column(String(12), primary_key=True)
-    inst_data: Mapped[dict[str, Any]] = mapped_column(JSONB)
-
-
 # Определение таблицы хранения портфеля пользователя
 class UserPortfolio(Base):
     __tablename__ = "user_portfolio"
-    __table_args__ = {"schema": "public"}
+    __table_args__ = (
+        UniqueConstraint("user_id", "isin", name="uix_user_isin"),
+        {"schema": "public"}
+    )
 
-    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    portfolio_data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    isin: Mapped[str] = mapped_column(String(12))
+    quantity: Mapped[BigInteger] = mapped_column(BigInteger, default=0)
+    avg_price: Mapped[Decimal | None] = mapped_column(Numeric(15, 4))
+    paper_data: Mapped[dict[str, Any]] = mapped_column(JSONB)
 
 
 class Bonds(Base):

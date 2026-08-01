@@ -1,8 +1,8 @@
+import logging
+
+from app.core.config import DATABASE_URL
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import declarative_base
-from app.core.config import DATABASE_URL
-
-import logging
 
 logger = logging.getLogger("database")
 

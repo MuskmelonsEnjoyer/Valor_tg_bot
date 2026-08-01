@@ -4,10 +4,17 @@ import sys
 
 class OwnLogsFilter(logging.Filter):
     """
-    Фильтр, пропускающий логи только от указанных модулей.
+    Фильтр, пропускающий INFO/DEBUG только от наших модулей,
+    но ВСЕГДА пропускающий любые ОШИБКИ (ERROR и выше) и логи от root.
     """
 
-    def filter(self, record):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno >= logging.ERROR:
+            return True
+
+        if record.name == "root":
+            return True
+        
         whitelist = [
             "bot",
             "database",

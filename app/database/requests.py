@@ -1,33 +1,9 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-
-
+from app.database import models
 from app.database.session import engine
-import app.database.models as models
-from app.services.api_moex import parsing_bonds
-
-
-# Функция загрузки всех активов по API т-инвестиции.
-async def update_actives(instrument_list: list[dict]):
-    if not instrument_list:
-        return
-
-    async with engine.begin() as conn:
-        stmt = pg_insert(models.Instruments).values(instrument_list)
-
-        upstmt = stmt.on_conflict_do_update(
-            constraint="uix_ticker_class_code",
-            set_=dict(
-                instrument_name=stmt.excluded.instrument_name,
-                instrument_isin=stmt.excluded.instrument_isin,
-                instrument_uid=stmt.excluded.instrument_uid,
-                instrument_currency=stmt.excluded.instrument_currency,
-                instrument_source_id=stmt.excluded.instrument_source_id,
-                instrument_figi=stmt.excluded.instrument_figi,
-            ),
-        )
-        await conn.execute(upstmt)
+from app.services.api_moex import parsing_instruments
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 # Функция сохранения API токенов пользователей
@@ -38,7 +14,7 @@ async def save_user_token(user_id: int, token: str) -> None:
         )
         upstmt = stmt.on_conflict_do_update(
             index_elements=["user_id"],
-            set_=dict(user_t_invest_token=stmt.excluded.user_t_invest_token),
+            set_={"user_t_invest_token": stmt.excluded.user_t_invest_token},
         )
         await session.execute(upstmt)
         await session.commit()
@@ -63,85 +39,85 @@ async def delete_user_token(user_id: int) -> None:
         await session.commit()
 
 
-# Функция сохранения информации об инструментах в базу данных
-async def save_instruments_bulk(instruments_map: dict) -> None:
-    if not instruments_map:
-        return
-
-    values_to_insert = [
-        {"isin": isin, "inst_data": data} for isin, data in instruments_map.items()
-    ]
-
+# Функция добавления бумаги в портфель пользователем
+async def upload_user_portfolio(user_id: int, secid: str, avg_price: float, quantity: int) -> None:
     async with AsyncSession(engine) as session:
-        stmt = pg_insert(models.Hash_all_instruments).values(values_to_insert)
+        
+        paper = select(models.Instruments.extra_data).where((models.Instruments.secid == secid) | (models.Instruments.isin == secid))
+
+        result = await session.execute(paper)
+        paper_data = result.scalar() 
+        
+        if not paper_data:
+            return False 
+        
+        insert_data = {"user_id": user_id, "isin": secid, "paper_data": paper_data, "avg_price": avg_price, "quantity": quantity}
+        
+        stmt = pg_insert(models.UserPortfolio).values(insert_data)
 
         upstmt = stmt.on_conflict_do_update(
-            index_elements=["isin"], set_=dict(inst_data=stmt.excluded.inst_data)
+            index_elements=["user_id", "isin"],
+            set_={"paper_data": stmt.excluded.paper_data, "avg_price": stmt.excluded.avg_price, "quantity": stmt.excluded.quantity} 
         )
 
         await session.execute(upstmt)
         await session.commit()
+        
+        return True
 
-
-# Функция поиска данных бумаги по её ISIN
-async def find_inst_data(isin: str) -> dict | None:
+# Функция удаления бумаги в портфель пользователем
+async def drop_isin_portfolio(user_id: int, secid: str) -> None:
     async with AsyncSession(engine) as session:
-        stmt = select(models.Hash_all_instruments).where(
-            models.Hash_all_instruments.isin == isin
+        stmt = (
+            delete(models.UserPortfolio).where(
+            models.UserPortfolio.user_id == user_id,
+            models.UserPortfolio.isin == secid
+            )
         )
+
         result = await session.execute(stmt)
-        record = result.scalar_one_or_none()
-
-        if record:
-            return record.inst_data
-        return None
-
-
-# Функция обновления портфеля пользователя
-async def upload_user_portfolio(portfolio: dict, user_id: int) -> None:
-    async with AsyncSession(engine) as session:
-        insert_data = {"user_id": user_id, "portfolio_data": portfolio}
-        stmt = pg_insert(models.User_portfolio).values(insert_data)
-
-        upstmt = stmt.on_conflict_do_update(
-            index_elements=["user_id"],
-            set_=dict(portfolio_data=stmt.excluded.portfolio_data),
-        )
-
-        await session.execute(upstmt)
         await session.commit()
+        
+        return result.rowcount > 0
 
 
-# Функция поиска названия актива по figi
-async def find_name_by_figi(figi: str) -> str | None:
+# Функция удаления бумаги в портфель пользователем
+async def drop_user_portfolio(user_id: int) -> None:
     async with AsyncSession(engine) as session:
-        stmt = select(models.Instruments.instrument_name).where(
-            models.Instruments.instrument_figi == figi
-        )
+        stmt = (delete(models.UserPortfolio).where(models.UserPortfolio.user_id == user_id))
 
         result = await session.execute(stmt)
-        record = result.scalar_one_or_none()
-
-        return record
+        await session.commit()
+        
+        return result.rowcount > 0
 
 
 # Функция возвращающая портфель
-async def get_user_portfolio(user_id: int) -> dict | None:
+async def get_user_portfolio(user_id: int) -> list[dict]:
     async with AsyncSession(engine) as session:
-        stmt = select(models.User_portfolio.portfolio_data).where(
-            models.User_portfolio.user_id == user_id
+        stmt = select(models.UserPortfolio).where(
+            models.UserPortfolio.user_id == user_id
         )
-
         result = await session.execute(stmt)
-        record = result.scalar_one_or_none()
+        records = result.scalars().all()
 
-        return record
+        portfolio = []
+        for record in records:
+            paper = dict(record.paper_data) if record.paper_data else {}
+            
+            paper["isin"] = record.isin
+            paper["avg_price"] = getattr(record, "avg_price", None)
+            paper["quantity"] = getattr(record, "quantity", None)
+
+            portfolio.append(paper)
+
+        return portfolio
 
 # Функция заполнения БД бондов
 async def upload_bonds_data() -> None:
     async with AsyncSession(engine) as session:
 
-        bonds = await parsing_bonds()
+        bonds = await parsing_instruments()
 
         insert_data = [
         {"isin": isin, "extra_data": extra_data}
@@ -154,17 +130,74 @@ async def upload_bonds_data() -> None:
 
         upsert_stmt = stmt.on_conflict_do_update(
             index_elements=["isin"],
-            set_=dict(extra_data=stmt.excluded.extra_data)
+            set_={"extra_data": stmt.excluded.extra_data}
         )
 
         await session.execute(upsert_stmt)
         await session.commit()
 
+
+# Функция заполнения таблицы всех инструментов
+async def upload_bonds_shares() -> None:
+        
+    shares, bonds = await parsing_instruments()
+
+    insert_data = []
+
+    for secid, data in bonds.items():
+        insert_data.append({
+            "secid": secid,
+            "isin": data.get("isin"),
+            "instrument_type": "bond",
+            "currency": data.get("currency", "RUB"),
+            "extra_data": data,
+        })
+
+    for secid, data in shares.items():
+        insert_data.append({
+            "secid": secid,
+            "isin": data.get("isin"),
+            "instrument_type": "share",
+            "currency": data.get("currency", "RUB"),
+            "extra_data": data,
+        })
+
+    async with AsyncSession(engine) as session:
+        stmt = pg_insert(models.Instruments).values(insert_data)
+
+        upsert_stmt = stmt.on_conflict_do_update(
+            index_elements=["secid"],
+            set_={
+                "isin": stmt.excluded.isin,
+                "currency": stmt.excluded.currency,
+                "extra_data": stmt.excluded.extra_data,
+                "updated_at": func.now(),
+            },
+        )
+
+        await session.execute(upsert_stmt)
+        await session.commit()
+
+
 # Функция получения данных облигации из таблицы
 async def get_bonds_info(isin: str) -> dict | None:
     async with AsyncSession(engine) as session:
-        stmt = select(models.Bonds.extra_data).where(
-            models.Bonds.isin == isin
+        stmt = select(models.Instruments.extra_data).where(
+            ((models.Instruments.isin == isin) | (models.Instruments.secid == isin)),
+            models.Instruments.instrument_type == "bond",
+        )
+
+        result = await session.execute(stmt)
+        record = result.scalar_one_or_none()
+
+        return record
+
+# Функция получения данных облигации из таблицы
+async def get_share_etf_info(isin_secid: str) -> dict | None:
+    async with AsyncSession(engine) as session:
+        stmt = select(models.Instruments.extra_data).where(
+            ((models.Instruments.secid == isin_secid) | (models.Instruments.isin == isin_secid)),
+            models.Instruments.instrument_type == "share",
         )
 
         result = await session.execute(stmt)
