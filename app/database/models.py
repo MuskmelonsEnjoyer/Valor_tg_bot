@@ -1,53 +1,92 @@
-from sqlalchemy import Column, Integer, String, Identity, BigInteger, UniqueConstraint
+from datetime import datetime
+from decimal import Decimal
+
+from sqlalchemy import (
+    Any,
+    BigInteger,
+    DateTime,
+    Numeric,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from app.database.session import Base
+
+class Base(DeclarativeBase):
+    pass
 
 
-# Определение базы данных и модели для хранения информации о всех активах.
+# Определение таблицы и модели для хранения информации о всех активах
 class Instruments(Base):
     __tablename__ = "instruments"
     __table_args__ = (
-        UniqueConstraint(
-            "instrument_ticker", "instrument_class_code", name="uix_ticker_class_code"
-        ),
         {"schema": "public"},
     )
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    secid: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
+    isin: Mapped[str | None] = mapped_column(String(12), unique=True, nullable=True)
+    instrument_type: Mapped[str] = mapped_column("type", String(20), index=True)
+    currency: Mapped[str] = mapped_column(String(10))
+    extra_data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
-    instrument_id = Column(Integer, Identity(start=1), primary_key=True)
-    instrument_name = Column(String, index=True)
-    instrument_isin = Column(String(12), unique=True, index=True)
-    instrument_uid = Column(String, index=True)
-    instrument_ticker = Column(String, index=True)
-    instrument_currency = Column(String, index=True)
-    instrument_type = Column(String, index=True)
-    instrument_class_code = Column(String, index=True)
-    instrument_source_id = Column(String, index=True)
-    instrument_figi = Column(String, unique=True, index=True)
+    def __repr__(self) -> str:
+        return f"<Instrument(secid='{self.secid}', type='{self.instrument_type}')>"
 
-
-# Определение базы данных для хранения API токенов т-инвестиции пользователей
-class User_tokens(Base):
+# Определение таблицы для хранения API-токенов Т-Инвестиций пользователей
+class UserToken(Base):
     __tablename__ = "users_t_invest_tokens"
     __table_args__ = {"schema": "public"}
 
-    user_id = Column(BigInteger, primary_key=True, index=True)
-    user_t_invest_token = Column(String, nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_t_invest_token: Mapped[str] = mapped_column(String)
 
 
-# Определение базы данных хранения информации об инструментах
-class Hash_all_instruments(Base):
-    __tablename__ = "hash_all_instruments"
-    __table_args__ = {"schema": "public"}
-
-    isin = Column(String, primary_key=True, index=True)
-    inst_data = Column(JSONB, nullable=False)
-
-
-# Определение базы данных хранения портфеля пользователя
-class User_portfolio(Base):
+# Определение таблицы хранения портфеля пользователя
+class UserPortfolio(Base):
     __tablename__ = "user_portfolio"
+    __table_args__ = (
+        UniqueConstraint("user_id", "isin", name="uix_user_isin"),
+        {"schema": "public"}
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    isin: Mapped[str] = mapped_column(String(12))
+    quantity: Mapped[BigInteger] = mapped_column(BigInteger, default=0)
+    avg_price: Mapped[Decimal | None] = mapped_column(Numeric(15, 4))
+    paper_data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+
+
+class Bonds(Base):
+    __tablename__ = "bonds"
     __table_args__ = {"schema": "public"}
 
-    user_id = Column(BigInteger, primary_key=True, index=True)
-    portfolio_data = Column(JSONB, nullable=False)
+    isin: Mapped[str] = mapped_column(String(12), primary_key=True)
+    extra_data: Mapped[dict | None] = mapped_column(JSONB, default=dict)
+
+
+# Позже доработаю универсальную таблицу для данных по портфелю
+
+# class UserPortfolio(Base):
+#     __tablename__ = "user_portfolio"
+#     __table_args__ = (
+#         # Один и тот же тикер не должен дублироваться у одного юзера.
+#         # Вместо дублирования мы должны увеличивать quantity.
+#         UniqueConstraint("user_id", "ticker", name="uq_user_ticker"),
+#         {"schema": "public"},
+#     )
+
+#     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+#     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+#     ticker: Mapped[str] = mapped_column(String(20), index=True)
+#     asset_type: Mapped[str] = mapped_column(String(20))
+#     quantity: Mapped[Decimal] = mapped_column(Numeric(15, 4), default=0)
+#     average_buy_price: Mapped[Decimal | None] = mapped_column(Numeric(15, 4))
+#     extra_data: Mapped[dict | None] = mapped_column(JSONB, default=dict)

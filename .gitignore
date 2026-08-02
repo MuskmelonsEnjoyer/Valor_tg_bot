@@ -1,9 +1,6 @@
 __pycache__/
-agent/
-broker_agent/
-last_version/
-parsing_data/
+valor_bot/
 config.py
 bot_log.log
-exam.ipynb
 .ruff_cache/
+1.py
