@@ -1,5 +1,6 @@
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
 
 
 class OwnLogsFilter(logging.Filter):
@@ -22,6 +23,8 @@ class OwnLogsFilter(logging.Filter):
             "news_parser",
             "handlers",
             "main",
+            "instrument_refresh",
+            "t_invest",
             "langgraph",
             "langchain",
         ]
@@ -49,7 +52,12 @@ def logger_config() -> None:
     logger.addHandler(console_handler)
 
     # Настройка файла
-    file_handler = logging.FileHandler("bot_log.log", mode="w", encoding="utf-8")
+    file_handler = RotatingFileHandler(
+        "bot_log.log",
+        maxBytes=5 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
     file_handler.addFilter(OwnLogsFilter())

@@ -21,9 +21,30 @@ def clean_text(text: str) -> str:
     for pattern, replacement in replacements.items():
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
 
-    allowed_tags = r"(b|strong|i|em|u|ins|s|strike|del|code|pre|a)"
+    allowed_tags = {
+        "b",
+        "strong",
+        "i",
+        "em",
+        "u",
+        "ins",
+        "s",
+        "strike",
+        "del",
+        "code",
+        "pre",
+        "a",
+    }
 
-    clean_text = re.sub(r"</?(?!" + allowed_tags + r"\b)[^>]*>", "", text)
+    def filter_tag(match: re.Match) -> str:
+        return match.group(0) if match.group(1).lower() in allowed_tags else ""
+
+    clean_text = re.sub(
+        r"</?([a-z][a-z0-9]*)(?:\s[^>]*)?\s*/?>",
+        filter_tag,
+        text,
+        flags=re.IGNORECASE,
+    )
 
     clean_text = re.sub(r"\n{3,}", "\n\n", clean_text)
 

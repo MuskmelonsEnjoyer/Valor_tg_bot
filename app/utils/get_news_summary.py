@@ -4,17 +4,18 @@ import aiohttp
 import app.services.news_parser as news_parser
 
 
-async def get_news_summary(hours: int = 24):
-    if hours > 48:
-        return "Выбран слишком большой промежуток времени", 0
+async def get_news_summary(hours: int = 24, max_news: int = 20):
+    if hours <= 0 or hours > 48:
+        return "Допустимый промежуток времени: от 1 до 48 часов", 0
 
-    async with aiohttp.ClientSession() as session:
+    timeout = aiohttp.ClientTimeout(total=30, connect=10)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
         now = int(time.time())
         time_delta = hours * 3600
         start_time = now - time_delta
 
         news_list = await news_parser.get_rbc_quote_news_period(
-            session, start_time, now
+            session, start_time, now, max_items=max_news
         )
 
         if not news_list:
@@ -22,16 +23,21 @@ async def get_news_summary(hours: int = 24):
 
         final_news_content = []
         tasks = []
+        semaphore = asyncio.Semaphore(5)
+
+        async def load_content(url: str) -> str:
+            async with semaphore:
+                return await news_parser.get_new_content(url, session)
 
         for new in news_list:
-            tasks.append(news_parser.get_new_content(new["link"], session))
+            tasks.append(load_content(new["link"]))
 
         contents = await asyncio.gather(*tasks)
 
         for i, new in enumerate(news_list):
             title = new.get("title")
             date = new.get("date_str")
-            text = contents[i]
+            text = contents[i][:10_000]
 
             if not text:
                 text = "Текст статьи недоступен"

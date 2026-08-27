@@ -11,6 +11,7 @@ async def get_rbc_quote_news_period(
     session: aiohttp.ClientSession,
     start_time: int,
     end_time: int,
+    max_items: int = 50,
 ) -> list:
     url_template = (
         "https://www.rbc.ru/quote/ajax/get-news-feed/project/quote/lastDate/{}/limit/50"
@@ -88,6 +89,9 @@ async def get_rbc_quote_news_period(
                                 ),
                             }
                         )
+                        if len(collected_news) >= max_items:
+                            stop_parsing = True
+                            break
 
                 if stop_parsing:
                     # logger.info("Дошли до границы start_time. Остановка.")
@@ -109,9 +113,7 @@ async def get_rbc_quote_news_period(
 
 
 async def get_new_content(url: str, session: aiohttp.ClientSession) -> str:
-    url = url
-
-    headers = headers = {
+    headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
     }
 
@@ -132,6 +134,7 @@ async def get_new_content(url: str, session: aiohttp.ClientSession) -> str:
 
     if not article_text:
         logger.warning(f"Не удалось найти содержание новости по ссылке: {url}")
+        return ""
 
     trash_classes = [
         "article__inline-item",

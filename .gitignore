@@ -1,6 +1,12 @@
 __pycache__/
 valor_bot/
-config.py
 bot_log.log
+.env
+.env.*
+!.env.example
 .ruff_cache/
 1.py
+AUDIT.md
+TODO.md
+Back бота Valor V10.xlsx
+.codex_test_deps
