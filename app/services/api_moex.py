@@ -3,8 +3,6 @@ import asyncio
 import aiohttp
 
 
-<<<<<<< HEAD
-=======
 async def _get_json(
     session: aiohttp.ClientSession, url: str, params: dict[str, str]
 ) -> dict:
@@ -162,7 +160,6 @@ def _set_bond_price(
     )
 
 
->>>>>>> f04103d (version 1.0.0)
 async def parsing_bonds(session: aiohttp.ClientSession) -> dict:
     url = "https://iss.moex.com/iss/engines/stock/markets/bonds/securities.json"
     params = {
@@ -171,14 +168,6 @@ async def parsing_bonds(session: aiohttp.ClientSession) -> dict:
         "limit": "10000",
     }
 
-<<<<<<< HEAD
-    async with session.get(url, params=params, ssl=False) as response:
-        payload = await response.json()
-
-    cols_sec = {name: idx for idx, name in enumerate(payload["securities"]["columns"])}
-    cols_md = {name: idx for idx, name in enumerate(payload["marketdata"]["columns"])}
-    cols_yields = {name: idx for idx, name in enumerate(payload["marketdata_yields"]["columns"])}
-=======
     payload = await _get_json(session, url, params)
 
     sec_columns, sec_data = _section(payload, "securities")
@@ -187,16 +176,11 @@ async def parsing_bonds(session: aiohttp.ClientSession) -> dict:
     cols_sec = _column_map(sec_columns)
     cols_md = _column_map(md_columns)
     cols_yields = _column_map(yield_columns)
->>>>>>> f04103d (version 1.0.0)
 
     target_boards = {"TQCB", "TQOB"}
     bonds_catalog = {}
 
-<<<<<<< HEAD
-    for bond in payload["securities"]["data"]:
-=======
     for bond in sec_data:
->>>>>>> f04103d (version 1.0.0)
         boardid = bond[cols_sec["BOARDID"]]
         if boardid not in target_boards:
             continue
@@ -215,27 +199,6 @@ async def parsing_bonds(session: aiohttp.ClientSession) -> dict:
             "coupon_period": bond[cols_sec["COUPONPERIOD"]],
             "coupon_percent": bond[cols_sec["COUPONPERCENT"]],
             "isin": bond[cols_sec["ISIN"]],
-<<<<<<< HEAD
-            "instrument_type": "bond",
-        }
-
-    for md in payload["marketdata"]["data"]:
-        secid = md[cols_md["SECID"]]
-        if secid in bonds_catalog:
-            last_percent = md[cols_md["LAST"]]
-            open_price = md[cols_md["OPEN"]]
-            face_value = bonds_catalog[secid]["face_value"]
-            
-            if last_percent is not None and face_value is not None:
-                actual_price = (last_percent / 100) * face_value
-            else:
-                actual_price = None
-                
-            bonds_catalog[secid]["last_price"] = actual_price
-            bonds_catalog[secid]["open"] = open_price
-
-    for yld in payload["marketdata_yields"]["data"]:
-=======
             "prev_price_percent": _value(bond, cols_sec, "PREVPRICE")
             or _value(bond, cols_sec, "PREVWAPRICE")
             or _value(bond, cols_sec, "PREVLEGALCLOSEPRICE"),
@@ -266,7 +229,6 @@ async def parsing_bonds(session: aiohttp.ClientSession) -> dict:
             )
 
     for yld in yield_data:
->>>>>>> f04103d (version 1.0.0)
         secid = yld[cols_yields["SECID"]]
         if secid in bonds_catalog:
             bonds_catalog[secid]["effectiveyield"] = yld[cols_yields["EFFECTIVEYIELD"]]
@@ -283,19 +245,6 @@ async def parsing_shares(session: aiohttp.ClientSession):
                   "limit": "10000",
                 }
 
-<<<<<<< HEAD
-    async with session.get(url, params = params, ssl=False) as response:
-        payload = await response.json()
-
-    sec_columns = payload['securities']['columns']
-    sec_data = payload['securities']['data']
-
-    md_columns = payload['marketdata']['columns']
-    md_data = payload['marketdata']['data']
-
-    cols_sec = {name: idx for idx, name in enumerate(sec_columns)}
-    cols_md = {name: idx for idx, name in enumerate(md_columns)}
-=======
     payload = await _get_json(session, url, params)
 
     sec_columns, sec_data = _section(payload, "securities")
@@ -303,7 +252,6 @@ async def parsing_shares(session: aiohttp.ClientSession):
 
     cols_sec = _column_map(sec_columns)
     cols_md = _column_map(md_columns)
->>>>>>> f04103d (version 1.0.0)
 
     shares_catalog_sec = {}
     shares_catalog_md = {}
@@ -315,8 +263,6 @@ async def parsing_shares(session: aiohttp.ClientSession):
             'name': share[cols_sec['SHORTNAME']],
             'isin': share[cols_sec['ISIN']],
             'currency': share[cols_sec['CURRENCYID']],
-<<<<<<< HEAD
-=======
             'prev_price': _value(share, cols_sec, 'PREVPRICE')
             or _value(share, cols_sec, 'PREVWAPRICE')
             or _value(share, cols_sec, 'PREVLEGALCLOSEPRICE'),
@@ -330,22 +276,14 @@ async def parsing_shares(session: aiohttp.ClientSession):
                 else None
             ),
             'prev_date': _value(share, cols_sec, 'PREVDATE'),
->>>>>>> f04103d (version 1.0.0)
             'instrument_type': 'share',
         }
 
     for share in md_data:
         secid = share[cols_md['SECID']]
 
-<<<<<<< HEAD
-        shares_catalog_md[secid] = {
-        "last": share[cols_md['LAST']],
-        "open": share[cols_md["OPEN"]],
-        }
-=======
         shares_catalog_md[secid] = {"open": _value(share, cols_md, "OPEN")}
         _set_share_price(shares_catalog_md[secid], share, cols_md)
->>>>>>> f04103d (version 1.0.0)
 
     all_secids = shares_catalog_sec.keys() | shares_catalog_md.keys()
     shares_catalog = {
@@ -356,8 +294,6 @@ async def parsing_shares(session: aiohttp.ClientSession):
         for secid in all_secids
     }
 
-<<<<<<< HEAD
-=======
     for data in shares_catalog.values():
         if data.get("last") is None and data.get("prev_price") is not None:
             data["last"] = data["prev_price"]
@@ -370,22 +306,13 @@ async def parsing_shares(session: aiohttp.ClientSession):
             data.setdefault("price_date", data.get("prev_date"))
             data.setdefault("price_delay_minutes", 15)
 
->>>>>>> f04103d (version 1.0.0)
     return shares_catalog
 
 
 async def parsing_instruments():
-<<<<<<< HEAD
-    async with aiohttp.ClientSession() as session:
-        shares, bonds = await asyncio.gather(
-            parsing_shares(session), parsing_bonds(session)
-        )
-    return shares, bonds
-=======
     timeout = aiohttp.ClientTimeout(total=90, connect=30)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         shares, bonds = await asyncio.gather(
             parsing_shares(session), parsing_bonds(session)
         )
     return shares, bonds
->>>>>>> f04103d (version 1.0.0)

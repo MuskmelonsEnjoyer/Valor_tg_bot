@@ -1,13 +1,5 @@
 from datetime import datetime
 from decimal import Decimal
-<<<<<<< HEAD
-
-from sqlalchemy import (
-    Any,
-    BigInteger,
-    DateTime,
-    Numeric,
-=======
 from typing import Any
 
 from sqlalchemy import (
@@ -18,7 +10,6 @@ from sqlalchemy import (
     Identity,
     Numeric,
     SmallInteger,
->>>>>>> f04103d (version 1.0.0)
     String,
     UniqueConstraint,
     func,
@@ -31,15 +22,6 @@ class Base(DeclarativeBase):
     pass
 
 
-<<<<<<< HEAD
-# Определение таблицы и модели для хранения информации о всех активах
-class Instruments(Base):
-    __tablename__ = "instruments"
-    __table_args__ = (
-        {"schema": "public"},
-    )
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-=======
 class AppUser(Base):
     __tablename__ = "app_users"
     __table_args__ = {"schema": "public"}
@@ -55,18 +37,13 @@ class Instruments(Base):
     __tablename__ = "instruments"
     __table_args__ = {"schema": "public"}
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
->>>>>>> f04103d (version 1.0.0)
     secid: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     isin: Mapped[str | None] = mapped_column(String(12), unique=True, nullable=True)
     instrument_type: Mapped[str] = mapped_column("type", String(20), index=True)
     currency: Mapped[str] = mapped_column(String(10))
-<<<<<<< HEAD
-    extra_data: Mapped[dict[str, Any]] = mapped_column(JSONB)
-=======
     extra_data: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, nullable=False
     )
->>>>>>> f04103d (version 1.0.0)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -81,17 +58,12 @@ class UserToken(Base):
     __tablename__ = "users_t_invest_tokens"
     __table_args__ = {"schema": "public"}
 
-<<<<<<< HEAD
-    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    user_t_invest_token: Mapped[str] = mapped_column(String)
-=======
     user_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("public.app_users.user_id", ondelete="CASCADE"),
         primary_key=True,
     )
     user_t_invest_token: Mapped[str] = mapped_column(String, nullable=False)
->>>>>>> f04103d (version 1.0.0)
 
 
 # Определение таблицы хранения портфеля пользователя
@@ -99,17 +71,6 @@ class UserPortfolio(Base):
     __tablename__ = "user_portfolio"
     __table_args__ = (
         UniqueConstraint("user_id", "isin", name="uix_user_isin"),
-<<<<<<< HEAD
-        {"schema": "public"}
-    )
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(BigInteger)
-    isin: Mapped[str] = mapped_column(String(12))
-    quantity: Mapped[BigInteger] = mapped_column(BigInteger, default=0)
-    avg_price: Mapped[Decimal | None] = mapped_column(Numeric(15, 4))
-    paper_data: Mapped[dict[str, Any]] = mapped_column(JSONB)
-=======
         {"schema": "public"},
     )
 
@@ -128,7 +89,6 @@ class UserPortfolio(Base):
     paper_data: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, nullable=False
     )
->>>>>>> f04103d (version 1.0.0)
 
 
 class Bonds(Base):
@@ -136,9 +96,6 @@ class Bonds(Base):
     __table_args__ = {"schema": "public"}
 
     isin: Mapped[str] = mapped_column(String(12), primary_key=True)
-<<<<<<< HEAD
-    extra_data: Mapped[dict | None] = mapped_column(JSONB, default=dict)
-=======
     extra_data: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, nullable=False
     )
@@ -192,7 +149,6 @@ class ValorAssetRisk(Base):
         onupdate=func.now(),
         nullable=False,
     )
->>>>>>> f04103d (version 1.0.0)
 
 
 # Позже доработаю универсальную таблицу для данных по портфелю
@@ -212,8 +168,4 @@ class ValorAssetRisk(Base):
 #     asset_type: Mapped[str] = mapped_column(String(20))
 #     quantity: Mapped[Decimal] = mapped_column(Numeric(15, 4), default=0)
 #     average_buy_price: Mapped[Decimal | None] = mapped_column(Numeric(15, 4))
-<<<<<<< HEAD
 #     extra_data: Mapped[dict | None] = mapped_column(JSONB, default=dict)
-=======
-#     extra_data: Mapped[dict | None] = mapped_column(JSONB, default=dict)
->>>>>>> f04103d (version 1.0.0)

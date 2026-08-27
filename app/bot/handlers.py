@@ -1,10 +1,4 @@
 import logging
-<<<<<<< HEAD
-
-import app.bot.keyboard as keyboards
-import app.services.portfolio_servise as portfolio_service
-from aiogram import Bot, F, Router, html
-=======
 from decimal import Decimal, InvalidOperation
 from math import isfinite
 from typing import Any, Awaitable, Callable
@@ -21,7 +15,6 @@ from app.services.instrument_price_service import refresh_and_store_instrument
 from app.services.t_invest import find_broker_neoassets
 from app.services.t_invest_token import resolve_market_data_token
 from aiogram import BaseMiddleware, Bot, F, Router, html
->>>>>>> f04103d (version 1.0.0)
 from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
@@ -36,12 +29,6 @@ from aiogram.types import (
 from app.bot import states
 from app.database import requests
 from app.utils import formatting
-<<<<<<< HEAD
-from t_tech.invest import AsyncClient, RequestError
-
-router = Router()
-logger = logging.getLogger("handlers")
-=======
 from t_tech.invest import AioRequestError, AsyncClient
 
 router = Router()
@@ -148,7 +135,6 @@ def _portfolio_open(paper: dict[str, Any], instrument_type: str) -> float | None
             return opening_price * face_value / 100
 
     return opening_price
->>>>>>> f04103d (version 1.0.0)
 
 
 # обработчик команды /start
@@ -197,8 +183,6 @@ async def set_commands(bot: Bot):
     await bot.set_my_commands(commands, BotCommandScopeDefault())
 
 
-<<<<<<< HEAD
-=======
 @router.message(Command("cancel"))
 async def cancel_command(message: Message, state: FSMContext) -> None:
     await _clear_state_preserving_valor_portfolio(state)
@@ -238,7 +222,6 @@ async def delete_sensitive_message(message: Message) -> None:
         logger.warning("Не удалось удалить сообщение с токеном: %s", exc)
 
 
->>>>>>> f04103d (version 1.0.0)
 # Обработчик команды /set_token. Запрашивает у пользователя токен T-Инвестиций и сохраняет его.
 @router.message(Command("set_token"))
 async def set_token_command(message: Message, state: FSMContext) -> None:
@@ -247,11 +230,7 @@ async def set_token_command(message: Message, state: FSMContext) -> None:
 
 
 # Обработчик получения токена от пользователя.
-<<<<<<< HEAD
-@router.message(states.UserState.waiting_for_token)
-=======
 @router.message(states.UserState.waiting_for_token, F.text)
->>>>>>> f04103d (version 1.0.0)
 async def process_token(message: Message, state: FSMContext):
     user_id = message.from_user.id
     token = message.text.strip()
@@ -261,21 +240,6 @@ async def process_token(message: Message, state: FSMContext):
         async with AsyncClient(token=token) as client:
             await client.users.get_accounts()
             await requests.save_user_token(user_id, token)
-<<<<<<< HEAD
-            await message.delete()
-            await state.clear()
-        return await message.answer("Токен успешно сохранен!")
-
-    except RequestError:
-        logger.warning(f"[User {user_id}] Введен недействительный токен")
-        await message.delete()
-        await message.answer("Ваш токен нейдействителен")
-        await state.clear()
-
-    except Exception as e:
-        logger.error(f"[User {user_id}] Системная ошибка при проверке/сохранении токена: {e}", exc_info=True)  # noqa: G201
-        await message.delete()
-=======
             await delete_sensitive_message(message)
             await state.clear()
         return await message.answer("Токен успешно сохранен!")
@@ -300,17 +264,12 @@ async def process_token(message: Message, state: FSMContext):
     except Exception as e:
         logger.error(f"[User {user_id}] Системная ошибка при проверке/сохранении токена: {e}", exc_info=True)  # noqa: G201
         await delete_sensitive_message(message)
->>>>>>> f04103d (version 1.0.0)
         await message.answer("Произошла ошибка при сохранении вашего токена. Пожалуйста, попробуйте позже.")
         await state.clear()
 
 
 # Меню портфеля пользователя
-<<<<<<< HEAD
-@router.message(Command("Portfolio"))
-=======
 @router.message(Command("portfolio"))
->>>>>>> f04103d (version 1.0.0)
 @router.message(F.text.lower() == "портфель")
 async def portfolio_menu_command(message: Message) -> None:
     await message.answer(text="Портфель",
@@ -318,11 +277,7 @@ async def portfolio_menu_command(message: Message) -> None:
 
 
 # Возврат клавиатуры в главное меню
-<<<<<<< HEAD
-@router.message(Command("Back_menu"))
-=======
 @router.message(Command("back_menu"))
->>>>>>> f04103d (version 1.0.0)
 @router.message(F.text.lower() == "назад в меню")
 async def back_menu_command(message: Message) -> None:
     await message.answer(text="Главное меню",
@@ -344,12 +299,9 @@ async def send_table_tg(message: Message) -> None:
         )
     
     try:
-<<<<<<< HEAD
-=======
         # Portfolio composition and quantities come exclusively from the
         # local user_portfolio table. get_user_portfolio joins the latest
         # cached instrument prices from instruments in the same DB query.
->>>>>>> f04103d (version 1.0.0)
         portfolio = await requests.get_user_portfolio(user_id)
         
         if not portfolio:
@@ -372,24 +324,12 @@ async def send_table_tg(message: Message) -> None:
 
             quantity = int(paper.get("quantity") or 0)
             
-<<<<<<< HEAD
-            raw_price = paper.get("last")
-            raw_open = paper.get("open")
-            
-            faceunit = "RUB"
-            if instrument_type == "bond":
-                paper_name = paper.get("bond_name") or "Без названия"
-                raw_faceunit = paper.get("faceunit")
-                if raw_faceunit and raw_faceunit != "SUR":
-                    faceunit = raw_faceunit
-=======
             price_f = _portfolio_price(paper, instrument_type)
             open_f = _portfolio_open(paper, instrument_type)
             
             price_currency = _instrument_price_currency(paper, instrument_type)
             if instrument_type == "bond":
                 paper_name = paper.get("bond_name") or "Без названия"
->>>>>>> f04103d (version 1.0.0)
             else:
                 paper_name = paper.get("name") or "Без названия"
 
@@ -397,24 +337,6 @@ async def send_table_tg(message: Message) -> None:
             summ_text = "Нет данных"
             delta_text = "Нет данных"
 
-<<<<<<< HEAD
-            if raw_price is not None:
-                try:
-                    price_f = float(raw_price)
-                    if price_f != 0:
-                        price_text = f"{price_f:.2f} {faceunit}"
-                        summ_text = f"{quantity * price_f:.2f} {faceunit}"
-
-                        if raw_open is not None:
-                            open_f = float(raw_open)
-                            delta_price = (price_f - open_f) * quantity
-
-                            sign = "+" if delta_price > 0 else ""
-                            delta_text = f"{sign}{delta_price:.2f}"
-                            
-                except (ValueError, TypeError):
-                    pass
-=======
             if price_f is not None and price_f != 0:
                 price_text = f"{price_f:.2f} {price_currency}"
                 summ_text = f"{quantity * price_f:.2f} {price_currency}"
@@ -424,7 +346,6 @@ async def send_table_tg(message: Message) -> None:
 
                     sign = "+" if delta_price > 0 else ""
                     delta_text = f"{sign}{delta_price:.2f}"
->>>>>>> f04103d (version 1.0.0)
 
             rows.append([
                 cell(paper_name, align="right"), 
@@ -465,20 +386,12 @@ async def add_paper_isin(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 # Обработчик добавления бумаги по ISIN
-<<<<<<< HEAD
-@router.message(states.UserState.add_paper_by_isin)
-=======
 @router.message(states.UserState.add_paper_by_isin, F.text)
->>>>>>> f04103d (version 1.0.0)
 async def process_add_isin(message: Message, state: FSMContext):
 
     raw_text = message.text.strip()
     user_id = message.from_user.id
-<<<<<<< HEAD
-    logger.info(f"[User {user_id}] Попытка добавления бумаги. Введенный текст: '{raw_text}'")
-=======
     logger.info(f"[User {user_id}] Попытка добавления бумаги")
->>>>>>> f04103d (version 1.0.0)
 
     user_data = raw_text.split()
 
@@ -508,17 +421,10 @@ async def process_add_isin(message: Message, state: FSMContext):
         return
     
     try:
-<<<<<<< HEAD
-        avg_price = float(raw_price.replace(",", "."))
-        if avg_price < 0:
-            raise ValueError("Цена не может быть отрицательной")
-    except ValueError as e:
-=======
         avg_price = Decimal(raw_price.replace(",", "."))
         if not avg_price.is_finite() or avg_price < 0:
             raise InvalidOperation("Цена должна быть неотрицательным числом")
     except InvalidOperation as e:
->>>>>>> f04103d (version 1.0.0)
         logger.warning(f"[User {user_id}] Ошибка парсинга цены '{raw_price}': {e}")
         await message.answer(
             f"❌ **Ошибка в цене:** `{raw_price}`\n"
@@ -587,11 +493,7 @@ async def delete_paper_by_isin(callback: CallbackQuery, state: FSMContext) -> No
     await state.set_state(states.UserState.delete_paper_by_isin)
 
 
-<<<<<<< HEAD
-@router.message(states.UserState.delete_paper_by_isin)
-=======
 @router.message(states.UserState.delete_paper_by_isin, F.text)
->>>>>>> f04103d (version 1.0.0)
 async def process_delete_isin(message: Message, state: FSMContext):
     user_id = message.from_user.id
     isin = message.text.strip().upper()
@@ -607,11 +509,7 @@ async def process_delete_isin(message: Message, state: FSMContext):
         return
 
     try:
-<<<<<<< HEAD
-        success = await requests.drop_isin_portfolio(user_id=user_id, isin=isin)
-=======
         success = await requests.drop_isin_portfolio(user_id=user_id, secid=isin)
->>>>>>> f04103d (version 1.0.0)
         if success:
             logger.info(f"[User {user_id}] Бумага {isin} успешно удалена")
             await message.answer(
@@ -666,25 +564,12 @@ async def process_delete_portfolio(callback: CallbackQuery, state: FSMContext):
 @router.message(Command("bonds"))
 @router.message(F.text.lower() == "облигации")
 async def bonds_command(message: Message) -> None:
-<<<<<<< HEAD
-    await message.answer("Доступне команды:", reply_markup=await keyboards.get_inline_keybord_bonds())
-=======
     await message.answer("Доступные команды:", reply_markup=await keyboards.get_inline_keybord_bonds())
->>>>>>> f04103d (version 1.0.0)
 
 
 # Кнопка получения информации облигации по её ISIN
 @router.callback_query(F.data == "get_bond_info")
 async def get_bond_info(callback: CallbackQuery, state: FSMContext) -> None:
-<<<<<<< HEAD
-    await callback.message.answer("Отправьте ISIN облигации")
-    await callback.answer()
-    await state.set_state(states.UserState.get_bond_by_isin)
-
-
-# Обработчик вывода данных по облигациям
-@router.message(states.UserState.get_bond_by_isin)
-=======
     await callback.message.answer(
         "Введите название, тикер или ISIN облигации.\n"
         "Например: `ОФЗ`, `RU000A`, `SBER`.",
@@ -1030,7 +915,6 @@ def _format_instrument_card(instrument: dict) -> str:
 
 # Обработчик вывода данных по облигациям
 @router.message(states.UserState.get_bond_by_isin, F.text)
->>>>>>> f04103d (version 1.0.0)
 async def process_bond_info(message: Message, state: FSMContext):
     user_id = message.from_user.id
     isin = message.text.strip().upper()
@@ -1050,15 +934,6 @@ async def process_bond_info(message: Message, state: FSMContext):
             logger.info(f"[User {user_id}] Облигация {isin} не найдена")
             await message.answer("Облигация с таким ISIN не найдена.")
             return
-<<<<<<< HEAD
-
-        bond_isin = bond_info.get("isin")
-        bond_name = bond_info.get("bond_name", "Без названия")
-        faceunit = "RUB" if bond_info.get("faceunit") in ("SUR", None) else bond_info.get("faceunit")
-
-        raw_price = bond_info.get("last")
-        price_text = f"{float(raw_price):.2f} руб." if raw_price is not None else "Нет данных"
-=======
         market_data_token = await resolve_market_data_token(user_id)
         bond_info = await refresh_and_store_instrument(
             bond_info,
@@ -1072,35 +947,23 @@ async def process_bond_info(message: Message, state: FSMContext):
         raw_price = bond_info.get("last_price")
         price = _safe_float(raw_price)
         price_text = f"{price:.2f} {currency}" if price is not None else "Нет данных"
->>>>>>> f04103d (version 1.0.0)
 
         accruedint = safe_float(bond_info.get("accruedint"))
         face_value = safe_float(bond_info.get("face_value"))
         coupon_value = safe_float(bond_info.get("coupon_value"))
         coupon_percent = safe_float(bond_info.get("coupon_percent"))
-<<<<<<< HEAD
-        coupon_period = bond_info.get("coupon_period") or 0
-=======
         coupon_period = safe_float(bond_info.get("coupon_period"))
         coupon_payments = round(365 / coupon_period, 1) if coupon_period > 0 else 0
->>>>>>> f04103d (version 1.0.0)
 
         matdate_text = formatting.format_date(bond_info.get("matdate")) if bond_info.get("matdate") else "Н/Д"
         next_coupon_text = formatting.format_date(bond_info.get("next_coupon")) if bond_info.get("next_coupon") else "Н/Д"
 
         text = (
             f"📈 <b>{bond_name}</b> (<code>{bond_isin}</code>)\n\n"
-<<<<<<< HEAD
-            f"• <b>Номинал:</b> {face_value:.2f} {faceunit}.\n"
-            f"• <b>Купон:</b> {coupon_value:.2f} {faceunit}. ({coupon_percent:.2f}%)\n"
-            f"• <b>Купонные выплаты в год:</b> {coupon_period}\n"
-            f"• <b>НКД:</b> {accruedint:.2f} руб.\n"
-=======
             f"• <b>Номинал:</b> {face_value:.2f} {currency}.\n"
             f"• <b>Купон:</b> {coupon_value:.2f} {currency}. ({coupon_percent:.2f}%)\n"
             f"• <b>Купонные выплаты в год:</b> {coupon_payments:g}\n"
             f"• <b>НКД:</b> {accruedint:.2f} {currency}.\n"
->>>>>>> f04103d (version 1.0.0)
             f"• <b>Текущая цена:</b> {price_text}\n"
             f"• <b>Следующий купон:</b> {next_coupon_text}\n"
             f"• <b>Дата погашения:</b> {matdate_text}\n"
@@ -1123,14 +986,6 @@ async def shares_etfs_command(message: Message) -> None:
 # Кнопка получения информации облигации по её ISIN
 @router.callback_query(F.data == "get_share_etf_info")
 async def get_shares_etf_info(callback: CallbackQuery, state: FSMContext) -> None:
-<<<<<<< HEAD
-    await callback.message.answer("Отправьте тикер или ISIN акции или фонда")
-    await callback.answer()
-    await state.set_state(states.UserState.get_share_etf_by_isin)
-
-
-@router.message(states.UserState.get_share_etf_by_isin)
-=======
     await callback.message.answer(
         "Введите название, тикер или ISIN акции, фонда или неоактива.\n"
         "Например: `Сбер`, `SBER`, `RU0009029540`.",
@@ -1142,7 +997,6 @@ async def get_shares_etf_info(callback: CallbackQuery, state: FSMContext) -> Non
 
 
 @router.message(states.UserState.get_share_etf_by_isin, F.text)
->>>>>>> f04103d (version 1.0.0)
 async def process_share_etf_info(message: Message, state: FSMContext):
 
     user_id = message.from_user.id
@@ -1157,16 +1011,6 @@ async def process_share_etf_info(message: Message, state: FSMContext):
             logger.info(f"[User {user_id}] Акция/фонд {isin_secid} не найдена")
             await message.answer("Акция или фонд с таким ISIN/тикером не найдено.")
             return
-<<<<<<< HEAD
-
-        paper_name = share_etf_info.get("name", "Без названия")
-
-        try:
-            last_price = float(share_etf_info.get("last", 0))
-            price_text = f"{last_price:.2f}"
-        except (ValueError, TypeError):
-            price_text = "Нет данных"
-=======
         market_data_token = await resolve_market_data_token(user_id)
         share_etf_info = await refresh_and_store_instrument(
             share_etf_info,
@@ -1186,7 +1030,6 @@ async def process_share_etf_info(message: Message, state: FSMContext):
             if last_price is not None
             else "Нет данных"
         )
->>>>>>> f04103d (version 1.0.0)
 
         text = (
             f"📈 <b>{paper_name}</b> (<code>{isin_secid}</code>)\n\n"
@@ -1199,11 +1042,6 @@ async def process_share_etf_info(message: Message, state: FSMContext):
         await message.answer("Произошла системная ошибка при обработке запроса.")
 
 
-<<<<<<< HEAD
-@router.message(F.text.lower() == "подборка valor")
-async def valor_command(message: Message) -> None:
-    await message.answer("Пупупупу пока тут пусто...")
-=======
 def _valor_temp_portfolio(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
     stored = data.get("valor_temp_portfolio")
     return dict(stored) if isinstance(stored, dict) else {}
@@ -1634,7 +1472,6 @@ async def portfolio_analysis_command(message: Message) -> None:
             exc_info=True,
         )
         await message.answer("Не удалось проанализировать портфель. Попробуйте позже.")
->>>>>>> f04103d (version 1.0.0)
 
 
 # Обработчик команды /delete_token. Удаляет сохраненный токен T-Инвестиций пользователя.
@@ -1642,49 +1479,23 @@ async def portfolio_analysis_command(message: Message) -> None:
 async def delete_token_command(message: Message) -> None:
     user_id = message.from_user.id
     try:
-<<<<<<< HEAD
-        await requests.delete_user_token(user_id)
-        logger.info(f"[User {user_id}] Успешно удалил токен")
-        await message.answer("Токен успешно удален!")
-=======
         deleted = await requests.delete_user_token(user_id)
         if deleted:
             logger.info(f"[User {user_id}] Успешно удалил токен")
             await message.answer("Токен успешно удален!")
         else:
             await message.answer("Сохраненный токен не найден.")
->>>>>>> f04103d (version 1.0.0)
     except Exception as e:
         logger.error(f"[User {user_id}] Ошибка при удалении токена: {e}", exc_info=True)  # noqa: G201
         await message.answer("Не удалось удалить токен. Попробуйте позже.")
 
 
-<<<<<<< HEAD
-# Загрузка портфеля по токену
-@router.message(Command("set_portfolio_by_token"))
-async def set_portfolio_command(message: Message) -> None:
-    user_id = message.from_user.id
-=======
 async def sync_portfolio_by_token(message: Message, user_id: int) -> None:
->>>>>>> f04103d (version 1.0.0)
     logger.info(f"[User {user_id}] Запрос на загрузку портфеля по токену")
     
     try:
         user_token = await requests.get_user_token(user_id)
         if not user_token:
-<<<<<<< HEAD
-            await message.answer("Сначала необходимо привязать токен с помощью команды /set_token.")
-            return
-
-        portfolio = await portfolio_service.get_user_portfolio_token(user_token)
-        if not portfolio:
-            await message.answer("Не удалось получить данные портфеля. Возможно, портфель пуст или токен недействителен.")
-            return
-            
-        await requests.upload_user_portfolio(portfolio, user_id)
-        logger.info(f"[User {user_id}] Портфель успешно загружен по токену")
-        await message.answer("Портфель успешно загружен!")
-=======
             await message.answer(
                 "Для загрузки личного портфеля необходимо привязать свой токен "
                 "с помощью команды /set_token. Системный токен используется только "
@@ -1716,14 +1527,11 @@ async def sync_portfolio_by_token(message: Message, user_id: int) -> None:
                 "Существующие локальные позиции сохранены."
             )
         await message.answer(result)
->>>>>>> f04103d (version 1.0.0)
     except Exception as e:
         logger.error(f"[User {user_id}] Ошибка при синхронизации портфеля по токену: {e}", exc_info=True)
         await message.answer("Произошла ошибка при загрузке портфеля.")
 
 
-<<<<<<< HEAD
-=======
 # Загрузка портфеля по токену
 @router.message(Command("set_portfolio_by_token"))
 async def set_portfolio_command(message: Message) -> None:
@@ -1736,7 +1544,6 @@ async def set_portfolio_callback(callback: CallbackQuery) -> None:
     await sync_portfolio_by_token(callback.message, callback.from_user.id)
 
 
->>>>>>> f04103d (version 1.0.0)
 @router.message(Command("agreement"))
 async def agreement_command(message: Message) -> None:
     await message.answer("https://telegra.ph/Polzovatelskoe-soglashenie-07-29-23")

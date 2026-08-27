@@ -24,10 +24,7 @@ async def get_portfolio_reply_keyboard():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="Мой портфель")],
-<<<<<<< HEAD
-=======
             [KeyboardButton(text="Анализ моего портфеля")],
->>>>>>> f04103d (version 1.0.0)
             [KeyboardButton(text="Добавить актив"), KeyboardButton(text="Удалить актив")],
             [KeyboardButton(text="Назад в меню")]
         ],
@@ -64,10 +61,6 @@ async def get_inline_keybord_portfolio_add_paper():
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Добавить бумагу по ISIN", callback_data="add_paper_isin")],
-<<<<<<< HEAD
-            [InlineKeyboardButton(text="Загрузить портфель из файла", callback_data="get_portfolio_xlx")],
-=======
->>>>>>> f04103d (version 1.0.0)
             [InlineKeyboardButton(text="Загрузить портфель по API токену", callback_data="get_portfolio_token")]
         ]
     )
@@ -94,9 +87,6 @@ async def get_agreement_keyboard():
             [InlineKeyboardButton(text="Нет", callback_data="no")]
         ]
     )
-<<<<<<< HEAD
-    return keyboard
-=======
     return keyboard
 
 
@@ -283,4 +273,3 @@ async def get_add_to_portfolio_keyboard(secid: str) -> InlineKeyboardMarkup:
             ]
         ]
     )
->>>>>>> f04103d (version 1.0.0)
