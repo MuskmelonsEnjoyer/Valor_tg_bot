@@ -21,9 +21,36 @@ def clean_text(text: str) -> str:
     for pattern, replacement in replacements.items():
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
 
+<<<<<<< HEAD
     allowed_tags = r"(b|strong|i|em|u|ins|s|strike|del|code|pre|a)"
 
     clean_text = re.sub(r"</?(?!" + allowed_tags + r"\b)[^>]*>", "", text)
+=======
+    allowed_tags = {
+        "b",
+        "strong",
+        "i",
+        "em",
+        "u",
+        "ins",
+        "s",
+        "strike",
+        "del",
+        "code",
+        "pre",
+        "a",
+    }
+
+    def filter_tag(match: re.Match) -> str:
+        return match.group(0) if match.group(1).lower() in allowed_tags else ""
+
+    clean_text = re.sub(
+        r"</?([a-z][a-z0-9]*)(?:\s[^>]*)?\s*/?>",
+        filter_tag,
+        text,
+        flags=re.IGNORECASE,
+    )
+>>>>>>> f04103d (version 1.0.0)
 
     clean_text = re.sub(r"\n{3,}", "\n\n", clean_text)
 
@@ -33,4 +60,8 @@ def format_date(date_str: str | None) -> str:
     """Преобразует дату из 2026-11-25 в 25.11.2026 с защитой от пустых значений."""
     if not date_str or "-" not in date_str:
         return "Н/Д"
+<<<<<<< HEAD
     return ".".join(date_str.split("-")[::-1])
+=======
+    return ".".join(date_str.split("-")[::-1])
+>>>>>>> f04103d (version 1.0.0)
