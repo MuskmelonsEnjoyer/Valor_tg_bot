@@ -1,0 +1,88 @@
+from t_tech.invest import AsyncClient
+from t_tech.invest.utils import quotation_to_decimal, money_to_decimal
+from app.database import requests
+
+
+async def process_portfolio(client: AsyncClient, account_id: str) -> tuple:
+    """
+    Функция для получения информации об активах клиента.
+    """
+    portfolio = await client.operations.get_portfolio(account_id=account_id)
+
+    total_val = money_to_decimal(portfolio.total_amount_portfolio)
+    currency = portfolio.total_amount_portfolio.currency
+
+    positions_list = []
+    for pos in portfolio.positions:
+        positions_list.append(
+            {
+                "Тикер": pos.ticker,
+                "Тип": pos.instrument_type,
+                "Количество": quotation_to_decimal(pos.quantity),
+                "Цена": money_to_decimal(pos.current_price),
+                # "Валюта": pos.current_price.currency
+            }
+        )
+
+    return total_val, currency, positions_list
+
+
+async def get_all_info(token: str) -> tuple:
+    """
+    Функция для получения информации на всех счетах клиента.
+    """
+    result_data = []
+    total_cost_list = []
+    async with AsyncClient(token) as client:
+        accounts_resp = await client.users.get_accounts()
+
+        for account in accounts_resp.accounts:
+            # print(f"Обработка счета: {account.name} ({account.id})...")
+
+            (
+                total_val,
+                currency,
+                positions,
+            ) = await process_portfolio(client, account.id)
+
+            account_info = {
+                "account_name": account.name,
+                # "account_id": account.id,
+                # "total_value": total_val,
+                "currency": currency,
+                "positions": positions,
+            }
+            result_data.append(account_info)
+            if currency == "rub":
+                total_cost_list.append(total_val)
+        total_cost = sum(total_cost_list)
+
+    return result_data
+
+
+async def get_user_portfolio_token(token: str):
+    """
+    Получает портфель через API по токену
+    """
+    async with AsyncClient(token) as client:
+        info = await client.users.get_accounts()
+        data = []
+
+        for account in info.accounts:
+            portfolio = await client.operations.get_portfolio(account_id=account.id)
+            if len(portfolio.positions) > 0:
+                for pos in portfolio.positions:
+                    figi = pos.figi
+                    current_price = money_to_decimal(pos.current_price)
+
+                    # ВАЖНО: find_name_by_figi находится в requests (база данных)
+                    name = await requests.find_name_by_figi(figi)
+
+                    quantity = quotation_to_decimal(pos.quantity)
+                    result = {
+                        "name": name,
+                        "current_price": float(current_price),
+                        "quantity": float(quantity),
+                    }
+                    data.append(result)
+    return data

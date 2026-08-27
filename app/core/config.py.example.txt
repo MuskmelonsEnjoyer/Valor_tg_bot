@@ -1,0 +1,4 @@
+TELEGRAM_TOKEN = "" # Токен для работы с TG ботом
+T_INVEST_TOKEN = "" # Токен для работы с API т-инвестиции
+GOOGLE_API_KEY = "" # Токен для Gemini
+BASE_URL = ""       # Подключение к БД
