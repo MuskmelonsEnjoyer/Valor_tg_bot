@@ -38,10 +38,6 @@ class UserTokenSearchFallbackTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=stored),
             ),
             patch(
-                "app.bot.handlers.resolve_market_data_token",
-                new=AsyncMock(return_value="user-token"),
-            ),
-            patch(
                 "app.bot.handlers.refresh_and_store_instrument",
                 new=AsyncMock(return_value=enriched),
             ) as refresh,
@@ -56,7 +52,61 @@ class UserTokenSearchFallbackTests(unittest.IsolatedAsyncioTestCase):
         live_text = card_message.edit_text.await_args.args[0]
         self.assertIn("MOEX", cached_text)
         self.assertIn("T-Invest", live_text)
-        refresh.assert_awaited_once_with(stored, token="user-token")
+        refresh.assert_awaited_once_with(stored, user_id=123)
+        state.clear.assert_not_awaited()
+
+    async def test_search_session_allows_multiple_instrument_selections(self):
+        state = AsyncMock()
+        first_card = SimpleNamespace(edit_text=AsyncMock())
+        second_card = SimpleNamespace(edit_text=AsyncMock())
+        message = SimpleNamespace(
+            answer=AsyncMock(side_effect=[first_card, second_card])
+        )
+        callback = SimpleNamespace(
+            data="instrument_select:SBER",
+            answer=AsyncMock(),
+            from_user=SimpleNamespace(id=123),
+            message=message,
+        )
+        sber = {
+            "secid": "SBER",
+            "name": "Сбербанк",
+            "instrument_type": "share",
+            "last": 300.0,
+            "price_source": "trade",
+        }
+        lkoh = {
+            "secid": "LKOH",
+            "name": "Лукойл",
+            "instrument_type": "share",
+            "last": 7000.0,
+            "price_source": "trade",
+        }
+
+        with (
+            patch(
+                "app.bot.handlers.requests.get_instrument_info",
+                new=AsyncMock(side_effect=[sber, lkoh]),
+            ) as get_instrument,
+            patch(
+                "app.bot.handlers.refresh_and_store_instrument",
+                new=AsyncMock(side_effect=[sber, lkoh]),
+            ),
+            patch(
+                "app.bot.handlers.keyboards.get_add_to_portfolio_keyboard",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            await select_instrument(callback, state)
+            callback.data = "instrument_select:LKOH"
+            await select_instrument(callback, state)
+
+        self.assertEqual(
+            [call.args[0] for call in get_instrument.await_args_list],
+            ["SBER", "LKOH"],
+        )
+        self.assertEqual(message.answer.await_count, 2)
+        state.clear.assert_not_awaited()
 
     async def test_existing_results_are_available_during_background_refresh(self):
         state = AsyncMock()
@@ -106,11 +156,7 @@ class UserTokenSearchFallbackTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(side_effect=[([], False), ([stored_row], False)]),
             ) as search,
             patch(
-                "app.bot.handlers.resolve_market_data_token",
-                new=AsyncMock(return_value="stored-token"),
-            ) as get_token,
-            patch(
-                "app.bot.handlers.find_broker_neoassets",
+                "app.bot.handlers.find_broker_neoassets_for_user",
                 new=AsyncMock(return_value=[broker_row]),
             ) as find_neoassets,
             patch(
@@ -124,8 +170,7 @@ class UserTokenSearchFallbackTests(unittest.IsolatedAsyncioTestCase):
         ):
             await _show_instrument_results(message, state, "NBISperpA")
 
-        get_token.assert_awaited_once_with(123)
-        find_neoassets.assert_awaited_once_with("NBISperpA", "stored-token")
+        find_neoassets.assert_awaited_once_with("NBISperpA", 123)
         upsert.assert_awaited_once_with([broker_row])
         self.assertEqual(search.await_count, 2)
         self.assertIn("NBISperpA", str(message.answer.await_args))

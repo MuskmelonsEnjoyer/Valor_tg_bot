@@ -2,9 +2,10 @@ import unittest
 import os
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app.services.t_invest import (
+    MarketDataTokenCandidate,
     _load_last_prices,
     _pack_instrument,
     configure_market_data_token,
@@ -13,7 +14,9 @@ from app.services.t_invest import (
     find_broker_neoassets,
     get_broker_instruments,
 )
+from grpc import StatusCode
 from t_tech.invest import LastPrice, MoneyValue, Quotation
+from t_tech.invest.exceptions import AioUnauthenticatedError
 
 
 class FakeMarketData:
@@ -151,6 +154,35 @@ class FakeResolvingClient:
         return None
 
 
+class FakeFallbackClient:
+    received_tokens = []
+
+    def __init__(self, token):
+        self.token = token
+        self.received_tokens.append(token)
+        self.market_data = FakeMarketData(
+            [
+                LastPrice(
+                    instrument_uid="resolved-uid",
+                    price=Quotation(units=321, nano=500_000_000),
+                    time=datetime(2026, 8, 27, 12, 0, tzinfo=UTC),
+                )
+            ]
+        )
+
+    async def __aenter__(self):
+        if self.token == "rejected-user-token":
+            raise AioUnauthenticatedError(
+                StatusCode.UNAUTHENTICATED,
+                "40003",
+                None,
+            )
+        return self
+
+    async def __aexit__(self, *_args):
+        return None
+
+
 class TInvestNormalizationTests(unittest.IsolatedAsyncioTestCase):
     def test_configures_official_sdk_ca_bundle(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -270,6 +302,29 @@ class TInvestNormalizationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(FakeSearchClient.received_tokens, ["stored-user-token"])
         self.assertEqual(result[0]["uid"], "neo-uid")
+
+    async def test_live_enrichment_falls_back_after_rejected_user_token(self):
+        FakeFallbackClient.received_tokens.clear()
+        rejected_user = MarketDataTokenCandidate(
+            "rejected-user-token",
+            "user",
+        )
+        system = MarketDataTokenCandidate("system-token", "system")
+        on_unauthenticated = AsyncMock()
+
+        with patch("app.services.t_invest.AsyncClient", FakeFallbackClient):
+            result = await enrich_with_latest_prices(
+                [{"uid": "resolved-uid", "instrument_type": "share"}],
+                token_candidates=(rejected_user, system),
+                on_unauthenticated=on_unauthenticated,
+            )
+
+        self.assertEqual(
+            FakeFallbackClient.received_tokens,
+            ["rejected-user-token", "system-token"],
+        )
+        on_unauthenticated.assert_awaited_once_with(rejected_user)
+        self.assertEqual(result[0]["last_price"], 321.5)
 
     async def test_live_enrichment_resolves_moex_row_by_isin(self):
         FakeResolvingClient.received_tokens.clear()

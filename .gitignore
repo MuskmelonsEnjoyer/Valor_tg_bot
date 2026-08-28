@@ -1,5 +1,5 @@
 __pycache__/
-valor_bot/
+.venv/
 bot_log.log
 .env
 .env.*

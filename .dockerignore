@@ -1,0 +1,14 @@
+.git
+.github
+.env
+.venv
+valor_bot
+.codex_test_deps
+__pycache__
+*.pyc
+*.pyo
+bot_log.log
+tests
+AUDIT.md
+TODO.md
+*.xlsx
