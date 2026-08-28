@@ -1,0 +1,24 @@
+FROM python:3.13-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+RUN groupadd --system valor \
+    && useradd --system --gid valor --home-dir /app valor
+
+COPY requirements.txt .
+RUN python -m pip install --upgrade pip \
+    && python -m pip install -r requirements.txt
+
+COPY main.py migrate.py update_instruments.py alembic.ini ./
+COPY app ./app
+COPY migrations ./migrations
+
+RUN chown -R valor:valor /app
+
+USER valor
+
+CMD ["python", "main.py"]
