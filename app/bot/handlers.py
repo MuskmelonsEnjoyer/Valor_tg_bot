@@ -12,8 +12,11 @@ from app.services.valor_analytics import (
 )
 from app.services.instrument_refresh import catalog_is_ready
 from app.services.instrument_price_service import refresh_and_store_instrument
-from app.services.t_invest import find_broker_neoassets
-from app.services.t_invest_token import resolve_market_data_token
+from app.services.t_invest_token import (
+    discard_rejected_private_user_token,
+    find_broker_neoassets_for_user,
+    resolve_private_user_token,
+)
 from aiogram import BaseMiddleware, Bot, F, Router, html
 from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -53,7 +56,8 @@ class ClearStateOnCommandMiddleware(BaseMiddleware):
         event: Message,
         data: dict[str, Any],
     ) -> Any:
-        if event.text and event.text.startswith("/"):
+        normalized_text = event.text.strip().lower() if event.text else ""
+        if normalized_text.startswith("/") or normalized_text in MENU_BUTTONS:
             state = data.get("state")
             if state is not None:
                 await state.clear()
@@ -142,8 +146,8 @@ def _portfolio_open(paper: dict[str, Any], instrument_type: str) -> float | None
 async def command_start_handler(message: Message) -> None:
     await message.answer(
         f"Привет, {html.bold(message.from_user.full_name)}!\n"
-        "Это бот команды <b>Valor</b>. Наша цель — помочь новичкам " \
-        " освоиться на фондовом рынке.\n\n"
+        "Это бот команды <b>Valor</b>.\n" \
+        "Наша цель — помочь новичкам освоиться на фондовом рынке.\n\n"
         "<b>Чем бот может быть полезен?</b>\n" \
         "• Найти информацию по облигациям, акциям и фондам вручную\n"
         "• Собрать портфель\n"
@@ -604,24 +608,22 @@ async def _show_instrument_results(
 
     if not results and page == 0 and instrument_type == "share":
         user_id = data.get("search_user_id")
-        market_data_token = await resolve_market_data_token(user_id)
-        if market_data_token:
-            try:
-                broker_rows = await find_broker_neoassets(query, market_data_token)
-                if broker_rows:
-                    await requests.upsert_instrument_catalog(broker_rows)
-                    results, has_next = await requests.search_instruments(
-                        query=query,
-                        instrument_type=instrument_type,
-                        limit=8,
-                    )
-            except Exception as exc:
-                logger.error(
-                    "T-Invest fallback search failed for user %s: %s",
-                    user_id,
-                    exc,
-                    exc_info=True,
+        try:
+            broker_rows = await find_broker_neoassets_for_user(query, user_id)
+            if broker_rows:
+                await requests.upsert_instrument_catalog(broker_rows)
+                results, has_next = await requests.search_instruments(
+                    query=query,
+                    instrument_type=instrument_type,
+                    limit=8,
                 )
+        except Exception as exc:
+            logger.error(
+                "T-Invest fallback search failed for user %s: %s",
+                user_id,
+                exc,
+                exc_info=True,
+            )
     if not results:
         await message.answer(
             "Ничего не найдено. Попробуйте другую часть названия, тикер или ISIN."
@@ -678,7 +680,6 @@ async def instrument_search_page(callback: CallbackQuery, state: FSMContext) -> 
 async def select_instrument(callback: CallbackQuery, state: FSMContext) -> None:
     secid = callback.data.partition(":")[2]
     await callback.answer()
-    await state.clear()
 
     try:
         instrument = await requests.get_instrument_info(secid)
@@ -696,10 +697,9 @@ async def select_instrument(callback: CallbackQuery, state: FSMContext) -> None:
 
         # The cached card is delivered immediately. Live T-Invest enrichment
         # happens afterwards and updates the same Telegram message.
-        market_data_token = await resolve_market_data_token(callback.from_user.id)
         enriched = await refresh_and_store_instrument(
             instrument,
-            token=market_data_token,
+            user_id=callback.from_user.id,
         )
         live_text = _format_instrument_card(enriched)
         if live_text != cached_text:
@@ -934,10 +934,9 @@ async def process_bond_info(message: Message, state: FSMContext):
             logger.info(f"[User {user_id}] Облигация {isin} не найдена")
             await message.answer("Облигация с таким ISIN не найдена.")
             return
-        market_data_token = await resolve_market_data_token(user_id)
         bond_info = await refresh_and_store_instrument(
             bond_info,
-            token=market_data_token,
+            user_id=user_id,
         )
 
         bond_isin = bond_info.get("isin")
@@ -1011,10 +1010,9 @@ async def process_share_etf_info(message: Message, state: FSMContext):
             logger.info(f"[User {user_id}] Акция/фонд {isin_secid} не найдена")
             await message.answer("Акция или фонд с таким ISIN/тикером не найдено.")
             return
-        market_data_token = await resolve_market_data_token(user_id)
         share_etf_info = await refresh_and_store_instrument(
             share_etf_info,
-            token=market_data_token,
+            user_id=user_id,
         )
 
         paper_name = share_etf_info.get("name", "Без названия")
@@ -1494,7 +1492,7 @@ async def sync_portfolio_by_token(message: Message, user_id: int) -> None:
     logger.info(f"[User {user_id}] Запрос на загрузку портфеля по токену")
     
     try:
-        user_token = await requests.get_user_token(user_id)
+        user_token = await resolve_private_user_token(user_id)
         if not user_token:
             await message.answer(
                 "Для загрузки личного портфеля необходимо привязать свой токен "
@@ -1527,6 +1525,36 @@ async def sync_portfolio_by_token(message: Message, user_id: int) -> None:
                 "Существующие локальные позиции сохранены."
             )
         await message.answer(result)
+    except AioRequestError as exc:
+        if exc.code.name == "UNAUTHENTICATED":
+            discarded = await discard_rejected_private_user_token(
+                user_id,
+                user_token,
+            )
+            logger.warning(
+                "[User %s] Сохраненный token T-Invest отклонен при "
+                "синхронизации портфеля",
+                user_id,
+            )
+            if discarded:
+                await message.answer(
+                    "Сохраненный токен T-Invest больше не действует и был "
+                    "удален. Привяжите новый токен с помощью команды /set_token."
+                )
+            else:
+                await message.answer(
+                    "Использованный токен T-Invest был отклонен. Проверьте "
+                    "актуальный токен с помощью команды /set_token."
+                )
+            return
+
+        logger.error(
+            "[User %s] Ошибка T-Invest при синхронизации портфеля: %s",
+            user_id,
+            exc,
+            exc_info=True,
+        )
+        await message.answer("Произошла ошибка при загрузке портфеля.")
     except Exception as e:
         logger.error(f"[User {user_id}] Ошибка при синхронизации портфеля по токену: {e}", exc_info=True)
         await message.answer("Произошла ошибка при загрузке портфеля.")

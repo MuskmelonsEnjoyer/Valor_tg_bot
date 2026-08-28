@@ -56,3 +56,31 @@ class CommandMiddlewareTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "handled")
         self.assertTrue(state_seen_by_handler)
         self.assertIsNone(raw_state_seen_by_handler)
+
+    async def test_menu_action_clears_state_before_handler(self):
+        state = FakeState()
+
+        async def handler(_event, data):
+            return data["state"].cleared, data["raw_state"]
+
+        result = await ClearStateOnCommandMiddleware()(
+            handler,
+            FakeMessage("Мой портфель"),
+            {"state": state, "raw_state": "UserState:search_instrument"},
+        )
+
+        self.assertEqual(result, (True, None))
+
+    async def test_search_query_keeps_current_state(self):
+        state = FakeState()
+
+        async def handler(_event, data):
+            return data["state"].cleared, data["raw_state"]
+
+        result = await ClearStateOnCommandMiddleware()(
+            handler,
+            FakeMessage("Сбербанк"),
+            {"state": state, "raw_state": "UserState:search_instrument"},
+        )
+
+        self.assertEqual(result, (False, "UserState:search_instrument"))

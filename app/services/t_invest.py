@@ -1,10 +1,13 @@
 import asyncio
 import logging
 import os
+from collections.abc import Awaitable, Callable, Iterable
+from dataclasses import dataclass
 from decimal import Decimal
+from typing import Literal
 
 from t_tech.invest import AsyncClient, InstrumentIdType, InstrumentStatus
-from t_tech.invest.exceptions import AioRequestError
+from t_tech.invest.exceptions import AioRequestError, AioUnauthenticatedError
 from t_tech.invest.utils import money_to_decimal, quotation_to_decimal
 
 logger = logging.getLogger("t_invest")
@@ -12,6 +15,15 @@ logger = logging.getLogger("t_invest")
 _PRICE_BATCH_SIZE = 300
 _market_data_token: str | None = None
 _RETRYABLE_T_INVEST_CODES = {"UNAVAILABLE", "DEADLINE_EXCEEDED"}
+
+
+@dataclass(frozen=True, slots=True)
+class MarketDataTokenCandidate:
+    token: str
+    source: Literal["user", "system", "provided"]
+
+
+TokenRejectedCallback = Callable[[MarketDataTokenCandidate], Awaitable[None]]
 
 
 def configure_t_invest_tls(use_bundled_russian_ca: bool) -> None:
@@ -294,35 +306,60 @@ async def find_broker_neoassets(query: str, token: str) -> list[dict]:
 
 
 async def enrich_with_latest_prices(
-    instruments: list[dict], token: str | None = None
+    instruments: list[dict],
+    token: str | None = None,
+    *,
+    token_candidates: Iterable[MarketDataTokenCandidate] | None = None,
+    on_unauthenticated: TokenRejectedCallback | None = None,
 ) -> list[dict]:
     """Overlay live T-Invest last trades, preserving stored MOEX fallbacks."""
     result = [dict(item) for item in instruments]
-    token_candidates = list(
-        dict.fromkeys(
-            candidate
-            for candidate in (token, _market_data_token)
-            if candidate
+    if token_candidates is None:
+        raw_candidates = (
+            MarketDataTokenCandidate(token.strip(), "provided")
+            if token and token.strip()
+            else None,
+            MarketDataTokenCandidate(_market_data_token.strip(), "system")
+            if _market_data_token and _market_data_token.strip()
+            else None,
         )
-    )
-    if not token_candidates:
+    else:
+        raw_candidates = tuple(token_candidates)
+
+    normalized_candidates: list[MarketDataTokenCandidate] = []
+    seen_tokens: set[str] = set()
+    for candidate in raw_candidates:
+        if candidate is None:
+            continue
+        normalized_token = candidate.token.strip()
+        if not normalized_token or normalized_token in seen_tokens:
+            continue
+        normalized_candidates.append(
+            MarketDataTokenCandidate(normalized_token, candidate.source)
+        )
+        seen_tokens.add(normalized_token)
+
+    if not normalized_candidates:
         return result
 
     for item in result:
         item.setdefault("asset_type", item.get("instrument_type", "share"))
 
-    for token_index, effective_token in enumerate(token_candidates):
+    for token_index, candidate in enumerate(normalized_candidates):
         last_error: Exception | None = None
+        unauthenticated = False
         for attempt in range(2):
             try:
-                async with AsyncClient(effective_token) as client:
+                async with AsyncClient(candidate.token) as client:
                     await _resolve_missing_uids(client, result)
-                    candidates = [item for item in result if item.get("uid")]
-                    if candidates:
-                        updated_uids = await _load_last_prices(client, candidates)
+                    price_candidates = [item for item in result if item.get("uid")]
+                    if price_candidates:
+                        updated_uids = await _load_last_prices(
+                            client, price_candidates
+                        )
                         stale_candidates = [
                             item
-                            for item in candidates
+                            for item in price_candidates
                             if item.get("uid") not in updated_uids and item.get("isin")
                         ]
                         if stale_candidates:
@@ -335,6 +372,18 @@ async def enrich_with_latest_prices(
                             )
                             await _load_last_prices(client, stale_candidates)
                 return result
+            except AioUnauthenticatedError as exc:
+                last_error = exc
+                unauthenticated = True
+                if on_unauthenticated is not None:
+                    try:
+                        await on_unauthenticated(candidate)
+                    except Exception:
+                        logger.exception(
+                            "Не удалось обработать отклоненный %s token T-Invest",
+                            candidate.source,
+                        )
+                break
             except AioRequestError as exc:
                 last_error = exc
                 if exc.code.name in _RETRYABLE_T_INVEST_CODES and attempt == 0:
@@ -345,11 +394,24 @@ async def enrich_with_latest_prices(
                 last_error = exc
                 break
 
-        has_fallback = token_index + 1 < len(token_candidates)
+        has_fallback = token_index + 1 < len(normalized_candidates)
+        if unauthenticated:
+            logger.warning(
+                "%s token T-Invest отклонен (%s); %s",
+                candidate.source.capitalize(),
+                getattr(last_error, "details", "UNAUTHENTICATED"),
+                "пробуем следующий token"
+                if has_fallback
+                else "используются сохраненные цены",
+            )
+            continue
+
         logger.error(
-            "Не удалось обновить цены T-Invest%s; используются %s",
-            " с пользовательским токеном" if token else "",
-            "резервный токен" if has_fallback else "сохраненные цены",
+            "Не удалось обновить цены T-Invest с %s token; %s",
+            candidate.source,
+            "пробуем следующий token"
+            if has_fallback
+            else "используются сохраненные цены",
             exc_info=last_error,
         )
     return result

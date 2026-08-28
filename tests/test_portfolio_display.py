@@ -151,18 +151,15 @@ class PortfolioDisplayHandlerTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=dict(instrument)),
             ),
             patch(
-                "app.bot.handlers.resolve_market_data_token",
-                new=AsyncMock(return_value=None),
-            ),
-            patch(
                 "app.bot.handlers.refresh_and_store_instrument",
                 new=AsyncMock(return_value=instrument),
-            ),
+            ) as refresh,
         ):
             await process_share_etf_info(message, state)
 
         text = message.answer.await_args.args[0]
         self.assertIn("229.35 USD", text)
+        refresh.assert_awaited_once_with(instrument, user_id=42)
 
     async def test_bond_price_from_t_invest_uses_instrument_currency(self):
         message = SimpleNamespace(
@@ -192,19 +189,16 @@ class PortfolioDisplayHandlerTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=dict(instrument)),
             ),
             patch(
-                "app.bot.handlers.resolve_market_data_token",
-                new=AsyncMock(return_value=None),
-            ),
-            patch(
                 "app.bot.handlers.refresh_and_store_instrument",
                 new=AsyncMock(return_value=instrument),
-            ),
+            ) as refresh,
         ):
             await process_bond_info(message, state)
 
         text = message.answer.await_args.args[0]
         self.assertIn("Текущая цена:</b> 995.50 USD", text)
         self.assertIn("НКД:</b> 12.50 USD", text)
+        refresh.assert_awaited_once_with(instrument, user_id=42)
 
     async def test_reads_local_portfolio_without_user_token_request(self):
         message = SimpleNamespace(
