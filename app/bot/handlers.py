@@ -48,6 +48,29 @@ MENU_BUTTONS = {
     "назад в меню",
 }
 
+INFO_PAGES = (
+    (
+        "🔎 <b> · Поиск бумаг</b>\n\n"
+        "В разделах <b>«Облигации»</b> и <b>«Акции и фонды»</b> можно найти бумагу "
+        "по названию, тикеру или ISIN, посмотреть её карточку и добавить "
+        "в портфель. После выдачи карточки можно сразу искать следующую бумагу."
+    ),
+    (
+        "📚 <b> · Подборка Valor</b>\n\n"
+        "Здесь собраны акции и облигации из экспертной подборки Valor. "
+        "Используйте каталог или поиск, добавляйте интересные бумаги во "
+        "временный портфель, а затем переносите выбранные позиции в основной."
+    ),
+    (
+        "💼 <b> · Портфель</b>\n\n"
+        "В портфеле можно добавлять и удалять позиции, смотреть их стоимость "
+        "и изменение цены. Раздел <b>«Анализ моего портфеля»</b> покажет риск-профиль "
+        "бумаг из подборки Valor и отдельно отметит позиции без аналитики."
+    ),
+        "📚 <b> · Menu</b>\n\n"
+        "В menu доступны дополительные полезные команды"
+)
+
 
 class ClearStateOnCommandMiddleware(BaseMiddleware):
     async def __call__(
@@ -152,18 +175,64 @@ async def command_start_handler(message: Message) -> None:
         "• Найти информацию по облигациям, акциям и фондам вручную\n"
         "• Собрать портфель\n"
         "• Изучить готовую аналитику от наших экспертов в разделе:\n"
-        "<b><i>«Подборка Valor»</i></b>\n\n",
+        "<b><i>«Подборка Valor»</i></b>\n\n"
+        "Навигация по боту доступна по команде /info",
         parse_mode="HTML",
         reply_markup=await keyboards.get_reply_keyboard()
     )
 
+
 # обработчик команды /info
 @router.message(Command("info"))
 async def info_command(message: Message) -> None:
-    info_text = (
-        "Valor bot — навигационный телеграм бот для новчиков на фондовом рынке.\n"
+    await _info_bot(message)
+
+
+async def _info_bot(message: Message, page: int = 0, *, edit: bool = False) -> None:
+    """Show one page of the guide in a new or existing Telegram message."""
+    reply_markup = await keyboards.info_keyboard(page, len(INFO_PAGES))
+    if edit:
+        await message.edit_text(
+            INFO_PAGES[page], parse_mode="HTML", reply_markup=reply_markup
+        )
+        return
+
+    await message.answer(
+        INFO_PAGES[page], parse_mode="HTML", reply_markup=reply_markup
     )
-    await message.answer(info_text, parse_mode="HTML")
+
+
+@router.callback_query(F.data.startswith("info:"))
+async def info_navigation(callback: CallbackQuery) -> None:
+    action = (callback.data or "").partition(":")[2]
+
+    if action == "menu":
+        await callback.answer()
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.answer(
+            "Главное меню", reply_markup=await keyboards.get_reply_keyboard()
+        )
+        return
+
+    if action == "portfolio":
+        await callback.answer()
+        await callback.message.answer(
+            "Портфель", reply_markup=await keyboards.get_portfolio_reply_keyboard()
+        )
+        return
+
+    try:
+        page = int(action)
+    except ValueError:
+        await callback.answer("Не удалось открыть страницу", show_alert=True)
+        return
+
+    if not 0 <= page < len(INFO_PAGES):
+        await callback.answer("Такой страницы нет", show_alert=True)
+        return
+
+    await callback.answer()
+    await _info_bot(callback.message, page, edit=True)
 
 
 # Список команд бота
@@ -496,7 +565,7 @@ async def delete_paper_by_isin(callback: CallbackQuery, state: FSMContext) -> No
     await callback.answer()
     await state.set_state(states.UserState.delete_paper_by_isin)
 
-
+# Обработчик удаления бумаги из портфеля
 @router.message(states.UserState.delete_paper_by_isin, F.text)
 async def process_delete_isin(message: Message, state: FSMContext):
     user_id = message.from_user.id
@@ -544,7 +613,7 @@ async def delete_portfolio(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(states.UserState.delete_portfolio)
     await callback.answer()
 
-
+# Обработичк отчистки портфеля
 @router.callback_query(states.UserState.delete_portfolio, F.data.in_(["yes", "no"]))
 async def process_delete_portfolio(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id

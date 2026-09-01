@@ -7,10 +7,24 @@ from app.bot.keyboard import (
     get_valor_assets_keyboard,
     get_valor_menu_keyboard,
     get_valor_temp_portfolio_keyboard,
+    info_keyboard,
 )
 
 
 class InstrumentKeyboardTests(unittest.IsolatedAsyncioTestCase):
+    async def test_info_keyboard_has_inline_navigation_and_section_action(self):
+        keyboard = await info_keyboard(page=1, total_pages=3)
+        callbacks = {
+            button.callback_data
+            for row in keyboard.inline_keyboard
+            for button in row
+        }
+
+        self.assertIn("valor_menu", callbacks)
+        self.assertIn("info:0", callbacks)
+        self.assertIn("info:2", callbacks)
+        self.assertIn("info:menu", callbacks)
+
     async def test_result_and_pagination_callbacks_are_compact(self):
         keyboard = await get_instrument_search_keyboard(
             [
