@@ -19,6 +19,57 @@ async def get_reply_keyboard():
 
     return keyboard
 
+
+async def info_keyboard(page: int, total_pages: int) -> InlineKeyboardMarkup:
+    """Return inline controls for the short bot guide."""
+    navigation = []
+    if page > 0:
+        navigation.append(
+            InlineKeyboardButton(text="⬅️ Назад", callback_data=f"info:{page - 1}")
+        )
+    if page < total_pages - 1:
+        navigation.append(
+            InlineKeyboardButton(text="Далее ➡️", callback_data=f"info:{page + 1}")
+        )
+
+    section_actions = {
+        0: [
+            [
+                InlineKeyboardButton(
+                    text="Найти облигацию", callback_data="get_bond_info"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Найти акцию / фонд", callback_data="get_share_etf_info"
+                )
+            ],
+        ],
+        1: [
+            [
+                InlineKeyboardButton(
+                    text="Открыть подборку Valor", callback_data="valor_menu"
+                )
+            ]
+        ],
+        2: [
+            [
+                InlineKeyboardButton(
+                    text="Открыть портфель", callback_data="info:portfolio"
+                )
+            ]
+        ],
+    }
+
+    rows = section_actions.get(page, [])
+    if navigation:
+        rows.append(navigation)
+    rows.append(
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="info:menu")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 # Клавиатура портфеля
 async def get_portfolio_reply_keyboard():
     keyboard = ReplyKeyboardMarkup(
