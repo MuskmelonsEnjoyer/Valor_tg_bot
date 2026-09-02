@@ -36,6 +36,13 @@ RISK_COLUMNS = (
     "minority_shareholder_risk",
 )
 AUTO_SOURCE = "Отбор бондов (ОФЗ авто)"
+FIXED_COUPON_CNY_OFZ = frozenset(
+    {
+        "RU000A10DQA8",
+        "RU000A10DQB6",
+        "RU000A10FAK6",
+    }
+)
 
 
 def _normalized_text(value: Any) -> str:
@@ -100,6 +107,7 @@ def _coupon_type(
 ) -> str:
     """Classify the OFZ family using API flags and standard MOEX issue codes."""
     data = instrument.extra_data or {}
+    isin = _normalized_text(instrument.isin).upper()
     secid = _normalized_text(instrument.secid).upper().split("@", 1)[0]
     name = _instrument_name(instrument).upper().replace(" ", "")
 
@@ -122,6 +130,8 @@ def _coupon_type(
     ):
         return "Перемен"
     if secid.startswith(("SU25", "SU26")) or "ОФЗ-ПД" in name:
+        return "Фикс"
+    if isin in FIXED_COUPON_CNY_OFZ:
         return "Фикс"
     return fallback or "Не определён"
 
