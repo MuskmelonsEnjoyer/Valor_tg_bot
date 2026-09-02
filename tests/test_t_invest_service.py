@@ -243,6 +243,10 @@ class TInvestNormalizationTests(unittest.IsolatedAsyncioTestCase):
             currency="rub",
             exchange="MOEX",
             nominal=MoneyValue(currency="rub", units=1000, nano=0),
+            coupon_quantity_per_year=4,
+            floating_coupon_flag=True,
+            amortization_flag=False,
+            perpetual_flag=False,
             lot=1,
         )
 
@@ -250,6 +254,9 @@ class TInvestNormalizationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["face_value"], 1000.0)
         self.assertEqual(result["bond_name"], "Bond")
+        self.assertEqual(result["coupon_quantity_per_year"], 4)
+        self.assertTrue(result["floating_coupon_flag"])
+        self.assertFalse(result["amortization_flag"])
 
     def test_packs_neoasset_future_into_share_search_group(self):
         item = SimpleNamespace(

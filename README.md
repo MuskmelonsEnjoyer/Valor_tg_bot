@@ -94,6 +94,25 @@ python migrate.py
 alembic -c alembic.ini upgrade head
 ```
 
+### Синхронизация ОФЗ в подборке Valor
+
+Команда берёт все активные ОФЗ из основной таблицы `instruments`, копирует
+существующий экспертный профиль риска ОФЗ и добавляет либо обновляет строки в
+`valor_asset_risks`. Акции и корпоративные облигации она не изменяет, старые
+строки не удаляет.
+
+Сначала проверьте найденные выпуски без записи в БД:
+
+```bash
+docker compose exec bot python -m app.database.valor_ofz_sync --dry-run
+```
+
+Затем примените изменения:
+
+```bash
+docker compose exec bot python -m app.database.valor_ofz_sync
+```
+
 Модели находятся в `app/database/models.py`, а ревизии в `migrations/versions/`. Токен и портфель связаны с `app_users`; удаление пользователя удаляет их каскадно. Инструменты, на которые ссылается портфель, удалить нельзя.
 
 ## Справочник инструментов
