@@ -67,6 +67,12 @@ class ValorOfzSyncTests(unittest.TestCase):
         self.assertEqual(_coupon_type(floating), "Перемен")
         self.assertEqual(_coupon_type(amortizing), "Аморт")
 
+    def test_cny_ofz_pd_issues_are_fixed_coupon(self):
+        for isin in ("RU000A10DQA8", "RU000A10DQB6", "RU000A10FAK6"):
+            with self.subTest(isin=isin):
+                item = instrument(isin, isin=isin, name="ОФЗ CNY")
+                self.assertEqual(_coupon_type(item), "Фикс")
+
     def test_matured_issue_is_not_active(self):
         old = instrument("SU26248RMFS3", matdate="2025-12-31")
         current = instrument("SU26249RMFS1", matdate="2026-09-02")
