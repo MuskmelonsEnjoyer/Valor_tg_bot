@@ -98,6 +98,18 @@ def _pack_instrument(item, instrument_type: str) -> dict | None:
     }
     if instrument_type == "bond":
         data["bond_name"] = data["name"]
+        data["coupon_quantity_per_year"] = getattr(
+            item, "coupon_quantity_per_year", None
+        )
+        data["floating_coupon_flag"] = bool(
+            getattr(item, "floating_coupon_flag", False)
+        )
+        data["amortization_flag"] = bool(
+            getattr(item, "amortization_flag", False)
+        )
+        data["perpetual_flag"] = bool(
+            getattr(item, "perpetual_flag", False)
+        )
         if nominal is not None:
             data["face_value"] = float(nominal)
     elif instrument_type == "neoasset":
